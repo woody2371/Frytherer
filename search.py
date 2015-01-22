@@ -197,7 +197,7 @@ def help():
     print "\t<card name> extend - gives extended info about the card (everything - rulings, legality, artist, flavour text, foreign names)"
     print "\t<card name>* - search card names (allows for regexps)"
     print "\tt <text> - search rules text of cards (allows for regexps)"
-    print "\tr <text> - search the comprehensive rules for text, or rule number (allows for regexps)"
+    print "\tr <text> - search the comprehensive rules for text (allows for regexps)"
     print "\ts <text> - search for cards with particular characteristics"
     print "\t\tcost=2UBR - search for costs"
     print "\t\ttype=creature - search for card/super/sub type"
@@ -252,11 +252,11 @@ while(1):
           continue
         card_name = card_name[2:]
         if card_name in all_rules:
-            print card_name + ": " + all_rules[card_name] + "\n"
+            print card_name + ": " + all_rules[card_name]
         else:
             rules_list = [(x, y) for (x, y) in all_rules.items() if re.search(card_name, y,  re.I)]
             for (rule_no, rule) in sorted(rules_list):
-                print str(rule_no) + ": " + rule + "\n"
+                print str(rule_no) + ": " + rule
         pass
     elif card_name == "printsets":
         # Print out the name of all the sets we know about
