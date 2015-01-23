@@ -1,4 +1,5 @@
 #!/usr/bin/python2.7
+# -*- coding: utf-8 -*-
 import json
 #import difflib
 import re
@@ -412,7 +413,7 @@ while(1):
                     pass
                 y = filter(cardSearch, gatherer[setname]["cards"])
             else:
-                y = [x for x in gatherer[setname]["cards"] if (x["name"] == card_name.rstrip() or x["name"].lower() == card_name.lower().rstrip())]
+                y = [x for x in gatherer[setname]["cards"] if (x["name"].replace(u"Æ", "Ae") == card_name.rstrip() or x["name"].replace(u"Æ", "Ae").lower() == card_name.lower().rstrip())]
         except sre_constants.error:
             continue
         if y != []:
