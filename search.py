@@ -134,7 +134,21 @@ def cardSearch(card):
             text = False
     else:
         text = True
-    return (cost and typ and rarity and text)
+    if terms.has_key('p'):
+        if card.get("power", "") == terms['p']:
+            power = True
+        else:
+            power = False
+    else:
+        power = True
+    if terms.has_key('t'):
+        if card.get("toughness", "") == terms['t']:
+            toughness = True
+        else:
+            toughness = False
+    else:
+        toughness = False
+    return (cost and typ and rarity and text and power and toughness)
 
 try:
   with open('CR.txt') as data_file:
@@ -204,6 +218,8 @@ def help():
     print "\t\ttype=creature - search for card/super/sub type"
     print "\t\trarity=common - search for card rarity"
     print "\t\ttext=trample - search for rules text"
+    print "\t\tp=3 - search for power"
+    print "\t\tt=4 - search for toughness"
     print "\trandom - gives a random card"
     print "\tprintsets - gives a list of all the sets I know about"
     print "\tallcards <set> - gives a list of all the cards with a given set code (use printsets to get the code)"
