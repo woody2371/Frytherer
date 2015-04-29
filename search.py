@@ -197,7 +197,7 @@ def cardname_completer(text, state):
         return None
 
 # Activate tab complete
-if 'libedit' in readline.__doc__:
+if readline.__doc__ != None and 'libedit' in readline.__doc__:
     print "Mac Tab Mode Active, your tab complete is going to be a bit shit! :(\n"
     readline.parse_and_bind("bind ^I rl_complete")
 else:
@@ -205,6 +205,69 @@ else:
 
 readline.set_completer_delims('')
 readline.set_completer(cardname_completer)
+
+# Syntax Help
+
+# All these options can be combined to more complicated queries: "a or b", "a not b", "a -b", "a (b or c)", "a or (b c)", and so on.
+
+# Name:
+#     Birds of Paradise
+#     "Birds of Paradise"
+#     !Anger (Match the full name)
+# Rules Text (Oracle):
+#     o:Flying
+#     o:"First strike"
+#     o:{T} o:"add one mana of any color"
+#     (new) o:"whenever ~ deals combat damage"
+# Types (Oracle):
+#     t:angel
+#     t:"legendary angel"
+#     t:basic
+#     t:"arcane instant"
+# Colors:
+#     c:w (Any card that is white)
+#     c:wu (Any card that is white or blue)
+#     c:wum (Any card that is white or blue, and multicolored)
+#     c!w (Cards that are only white)
+#     c!wu (Cards that are only white or blue, or both)
+#     c!wum (Cards that are only white and blue, and multicolored)
+#     c!wubrgm (Cards that are all five colors)
+#     c:m (Any multicolored card)
+#     c:l or c:c (Lands and colorless cards)
+# Color Identity:
+#     ci:wu (Any card that is white or blue, but does not contain any black, red or green mana symbols)
+# Color Indicator:
+#     (new) in:wu (Any card that is white or blue according to the color indicator.)
+# Mana Cost:
+#     mana=3G (Spells that cost exactly 3G, or split cards that can be cast with 3G)
+#     mana>=2WW (Spells that cost at least two white and two colorless mana)
+#     mana<GGGGGG (Spells that can be cast with strictly less than six green mana)
+#     mana>=2RR mana<=6RR (Spells that cost two red mana and between two and six colorless mana)
+#     (new) mana>={2/R}
+#     (new) mana>={W/U}
+#     (new) mana>={UP}
+# Power, Toughness, Converted Mana Cost:
+#     pow>=8
+#     tou<pow (All combinations are possible)
+#     cmc=7
+#     (new) cmc>=*
+# Rarity:
+#     r:mythic
+# Format:
+#     f:standard (or block, extended, vintage, classic, legacy, modern, commander)
+#     banned:extended (or legal, restricted)
+# Artist:
+#     a:"rk post"
+# Is:
+#     is:split, is:flip
+#     is:vanilla (Creatures with no card text)
+#     is:old, is:new, is:future (Old/new/future card face)
+#     is:timeshifted
+#     is:funny, not:funny (Unglued/Unhinged/Happy Holidays Promos)
+#     is:promo (Promotional cards)
+#     is:promo is:old (Promotional cards with the original card face)
+#     (new) is:permanent, is:spell
+#     (new) is:black-bordered, is:white-bordered, is:silver-bordered
 
 def help():
     print "Welcome to Frytherer.  Your options are:"
@@ -361,12 +424,17 @@ while(1):
                         weighted_choices = [('foil mythic rare', 1), ('foil rare', 5), ('foil uncommon', 12), ('foil common', 18)]
                         population = [val for val, cnt in weighted_choices for i in range(cnt)]
                         rarity = random.choice(population)
+                    elif len(rarity) == 2 and set_name == "isd":
+                        rarity = "land"
                     else:
                         print "Weird list of rarities: "
                         print rarity
                         rarity = rarity[0]
                 try:
-                    card = random.choice([x for x in gatherer[set_name.upper()]["cards"] if x["rarity"].lower() == rarity.lower() and "Conspiracy" not in x.get("types", []) and x["name"] not in already_picked])
+                    if set_name == "isd":
+                        card = random.choice([x for x in gatherer[set_name.upper()]["cards"] if x["rarity"].lower() == rarity.lower() and x["layout"].lower() == "normal" and x["name"] not in already_picked])
+                    else:    
+                        card = random.choice([x for x in gatherer[set_name.upper()]["cards"] if x["rarity"].lower() == rarity.lower() and "Conspiracy" not in x.get("types", []) and x["name"] not in already_picked])
                     printCard(card, prepend=rarity[0].upper() + ": ")
                     already_picked.append(card.get("name", ""))
                 except IndexError:
@@ -393,6 +461,9 @@ while(1):
                     elif rarity.startswith("foil") and set_name == "mma":
                         card = random.choice([x for x in gatherer[set_name.upper()]["cards"] if x["rarity"].lower() == rarity[5:]])
                         printCard(card, prepend="Foil ")
+                    elif rarity == "double faced":
+                         card = random.choice([x for x in gatherer[set_name.upper()]["cards"] if x["layout"].lower() == "double-faced" and x.get("cmc", 0) != 0])
+                         printCard(card, prepend="D: ")
                     else:
                         # No idea what we've encountered
                         print "Rarity: " + rarity
@@ -414,20 +485,6 @@ while(1):
                 y = [x for x in gatherer[setname]["cards"] if re.search(card_name.lower(), (x.get("name", "").lower()),  re.I)]
             elif search:
                 terms = {}
-                searchterms = card_name.split(" ")
-                try:
-                    for term in searchterms:
-                        x = term.split("=")
-                        terms[x[0]] = x[1]
-                except IndexError:
-                    print "Unable to parse search terms\n"
-                    print "\ts <text> - search for cards with particular characteristics"
-                    print "\t\tcost=2UBR - search for costs"
-                    print "\t\ttype=creature - search for card/super/sub type"
-                    print "\t\trarity=common - search for card rarity"
-                    print "\t\ttext=trample - search for rules text"
-                    pass
-                y = filter(cardSearch, gatherer[setname]["cards"])
             else:
                 y = [x for x in gatherer[setname]["cards"] if (x["name"].replace(u"Æ", "Ae") == card_name.rstrip() or x["name"].replace(u"Æ", "Ae").lower() == card_name.lower().rstrip())]
         except sre_constants.error:
