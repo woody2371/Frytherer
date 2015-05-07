@@ -18,6 +18,9 @@ import signal
 from itertools import product
 from operator import and_, or_
 
+def init_worker():
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
 def dedupe(seq, idfun=None):
         # order preserving
     if idfun is None:
@@ -37,62 +40,7 @@ def dedupe(seq, idfun=None):
         result.append(item)
     return result
 
-# define classes to be built at parse time, as each matching
-# expression type is parsed
-class BoolOperand(object):
-    def __init__(self,t):
-        self.label = t[0]
-        self.value = eval(t[0])
-    def __bool__(self):
-        return self.value
-    def __str__(self):
-        return self.label
-    __repr__ = __str__
-    __nonzero__ = __bool__
-
-class BoolBinOp(object):
-    def __init__(self,t):
-        self.args = t[0][0::2]
-    def __str__(self):
-        sep = " %s " % self.reprsymbol
-        return "(" + sep.join(map(str,self.args)) + ")"
-    def __bool__(self):
-        return self.evalop(bool(a) for a in self.args)
-    __nonzero__ = __bool__
-    __repr__ = __str__
-
-class BoolAnd(BoolBinOp):
-    reprsymbol = '&'
-    evalop = all
-
-class BoolOr(BoolBinOp):
-    reprsymbol = '|'
-    evalop = any
-
-class BoolNot(object):
-    def __init__(self,t):
-        self.arg = t[0][1]
-    def __bool__(self):
-        v = bool(self.arg)
-        return not v
-    def __str__(self):
-        return "~" + str(self.arg)
-    __repr__ = __str__
-    __nonzero__ = __bool__
-
-TRUE = Keyword("True")
-FALSE = Keyword("False")
-boolOperand = TRUE | FALSE | Word(alphas,max=1)
-boolOperand.setParseAction(BoolOperand)
-
-# define expression, based on expression operand and
-# list of operations in precedence order
-boolExpr = infixNotation( boolOperand,
-    [
-    ("not", 1, opAssoc.RIGHT, BoolNot),
-    ("and", 2, opAssoc.LEFT,  BoolAnd),
-    ("or",  2, opAssoc.LEFT,  BoolOr),
-    ])
+mana_regexp = re.compile('([0-9]*)(b*)(g*)(r*)(u*)(w*)')
 
 # Calculate the possible mana permutations of cards
 # Used for hybrid cards when comparing mana costs)
@@ -134,7 +82,7 @@ def calculateManaPerms(manaCost):
 # TODO: Handle Hybrid/Phyrexian
 def calculateCMC(manaCost):
     input_string = "".join(sorted(manaCost.replace("{", "").replace("}", "").lower()))
-    input_array = re.split('([0-9]*)(b*)(g*)(r*)(u*)(w*)', input_string)
+    input_array = mana_regexp.split(input_string)
 
     cmc = 0
     try:
@@ -180,6 +128,9 @@ def filter_function(card, terms, output):
                 ret = True
         elif term.startswith("restricted:"):
             if values["legalities"] != [] and values["legalities"].get(term[11:].title(), "") == "Restricted":
+                ret = True
+        elif term.startswith("set:"):
+            if term[4:] in values["printings_string"]:
                 ret = True
         elif term.startswith("pow"):
             # Quick shortcut for things that don't have power
@@ -293,9 +244,9 @@ def filter_function(card, terms, output):
                     if term[5:] in values:
                         if int(values["cmc"]) <= int(values[term[5:]]):
                             ret = True
-                        else:
-                            if int(values["cmc"]) <= int(term[5:]):
-                                ret = True
+                    else:
+                        if int(values["cmc"]) <= int(term[5:]):
+                            ret = True
                 elif term[3] == ">":
                     if term[4:] in values:
                         if int(values["cmc"]) > int(values[term[4:]]):
@@ -325,6 +276,7 @@ def filter_function(card, terms, output):
                 returnBools.append(False)
                 continue
         elif term.startswith("mana"):
+
             rets = []
             if values["mana"] == None:
                 returnBools.append(False)
@@ -340,12 +292,13 @@ def filter_function(card, terms, output):
                     mana_costs = calculateManaPerms(values["mana"].replace("W/P", "W").replace("U/P", "U").replace("B/P", "B").replace("R/P", "R").replace("G/P", "G"))
                     if term[4:].startswith(">="):
                         input_string = "".join(sorted(term[6:].replace("{", "").replace("}", "").lower()))
-                        input_array = re.split('([0-9]*)(b*)(g*)(r*)(u*)(w*)', input_string)
+
+                        input_array = mana_regexp.split(input_string)
                         manarets = []
                         for manacost in mana_costs:
                             rets = []
                             mana_cost_string = "".join(sorted(manacost.replace("X", "0").lower()))
-                            mana_cost_array = re.split('([0-9]*)(b*)(g*)(r*)(u*)(w*)', mana_cost_string)
+                            mana_cost_array = mana_regexp.split(mana_cost_string)
                             try:
                                 for idx, term in enumerate(mana_cost_array):
                                     if idx != 0 and idx != len(mana_cost_array)-1:
@@ -379,12 +332,12 @@ def filter_function(card, terms, output):
                         continue
                     elif term[4:].startswith("<="):
                         input_string = "".join(sorted(term[6:].replace("{", "").replace("}", "").lower()))
-                        input_array = re.split('([0-9]*)(b*)(g*)(r*)(u*)(w*)', input_string)
+                        input_array = mana_regexp.split(input_string)
                         manarets = []
                         for manacost in mana_costs:
                             rets = []
                             mana_cost_string = "".join(sorted(manacost.replace("X", "0").lower()))
-                            mana_cost_array = re.split('([0-9]*)(b*)(g*)(r*)(u*)(w*)', mana_cost_string)
+                            mana_cost_array = mana_regexp.split(mana_cost_string)
                             try:
                                 for idx, term in enumerate(mana_cost_array):
                                     if idx != 0 and idx != len(mana_cost_array)-1:
@@ -526,17 +479,18 @@ def filter_function(card, terms, output):
         returnBools.append(ret)
 
     boolString = output % tuple(returnBools)
-    res = boolExpr.parseString(boolString)[0]
+    #res = boolExpr.parseString(boolString)[0]
+    res = eval(boolString)
     if bool(res) == True:
         return card
 
 number_of_threads = 6
 
 if __name__ == '__main__':
-    pool = multiprocessing.Pool(processes=number_of_threads)
+    pool = multiprocessing.Pool(processes=number_of_threads, initializer=init_worker)
     multiprocessing.freeze_support
 
-    colon_mode = oneOf("n o t in pow tou cmc r f a banned legal restricted is")
+    colon_mode = oneOf("n o t in pow tou cmc r f a banned legal restricted is set")
     colon_or_bang_mode = "c"
     math_mode = oneOf("mana pow tou cmc")
     colon_operator = ":"
@@ -544,14 +498,14 @@ if __name__ == '__main__':
     math_operator = oneOf("= >= > <= < !")
     boolean_operators = oneOf("and not or")
     brackets = oneOf("( )")
-    operand = (Word(alphanums) | dblQuotedString | Combine(Literal("{") + Word(alphanums+"\\") + Literal("}")))
+    operand = (Word(alphanums) | dblQuotedString | OneOrMore(Combine(Literal("{") + Word(alphanums+"\\") + Literal("}"))))
 
     colon_total = colon_mode + colon_operator
     colon_or_bang_total = colon_or_bang_mode + oneOf([colon_operator, bang_operator])
     math_total = math_mode + math_operator
 
     total_thing = Combine( (colon_total | colon_or_bang_total | math_total) + operand )
-    super_total = OneOrMore(Optional(brackets) + total_thing + Optional(brackets) + Optional(OneOrMore(boolean_operators)))
+    super_total = OneOrMore(Optional(OneOrMore(boolean_operators)) + Optional(OneOrMore(brackets)) + total_thing + Optional(OneOrMore(brackets)) + Optional(OneOrMore(boolean_operators)))
 
     ctrlc = 0
 
@@ -578,10 +532,51 @@ if __name__ == '__main__':
         except IndexError:
             return default
 
-    def printCard(card, extend=0, prepend="", quick=True):
+    def printCard(card, extend=0, prepend="", quick=True, short=False):
         if quick:
             try:
-                print prepend + card.get("name", "") + " (" + card.get("manaCost", "") + ")"
+                if not short:
+                    print prepend + card.get("name", "") + " (" + card.get("manaCost", "") + ")"
+                else:
+                    # Do some MODO-like compression of rules text to get it to fit
+                    print prepend + card.get("name", ""),
+                    if "/" in card.get("manaCost", ""):
+                        print "(" + card.get("manaCost", "") + ")",
+                    else:
+                        print "(" + card.get("manaCost", "").replace("{", "").replace("}", "") + ")",
+                    squished_rules_text = " ".join([x[0] for x in card.get("types")])
+                    squished_rules_text += " - " + card.get("text", "").replace("\n", ". ").replace(card.get("name", ""), "~").replace("{", "").replace("}", "")
+                    squished_rules_text = re.sub('\(.*?\)', '', squished_rules_text)
+                    squished_rules_text = squished_rules_text.replace("They can't be regenerated.", "No regen.").replace("It can't be regenerated.", "No regen.")
+                    squished_rules_text = squished_rules_text.replace("Regenerate", "Regen").replace("acrifice", "ac")
+                    squished_rules_text = squished_rules_text.replace("arget", "gt").replace("raveyard", "y")
+                    squished_rules_text = squished_rules_text.replace("Search your library for", "Tutor").replace("search your library for", "tutor")
+                    squished_rules_text = squished_rules_text.replace("converted mana cost", "CMC")
+                    squished_rules_text = squished_rules_text.replace("end of turn", "EOT").replace("enters the battlefield", "ETB")
+                    squished_rules_text = squished_rules_text.replace("less than or equal to", "<=").replace("greater than or equal to", ">=")
+                    squished_rules_text = squished_rules_text.replace("less than", "<").replace("greater than", ">").replace("more than", ">")
+                    squished_rules_text = squished_rules_text.replace("is equal to", "=").replace("equal to", "=").replace(" and ", " & ")
+                    squished_rules_text = squished_rules_text.replace(" one ", " 1 ").replace(" two ", " 2 ").replace(" three ", " 3 ").replace(" four ", " 4 ").replace(" five ", " 5 ")
+                    squished_rules_text = squished_rules_text.replace("battlefield", "bf").replace("opponent", "opp").replace("damage", "dmg").replace("permanent", "perm")
+                    squished_rules_text = squished_rules_text.replace("discard a card", "discard").replace("draw a card", "cantrip").replace("Draw a card", "Cantrip")
+                    squished_rules_text = squished_rules_text.replace("any time you could cast a sorcery", "WRAPS").replace("becomes", "=").replace("where X is", "X =")
+                    squished_rules_text = squished_rules_text.replace("power", "pow").replace("toughness", "tou").replace("that card", "it").replace("that creature", "it")
+                    squished_rules_text = squished_rules_text.replace("Return it to your hand", "Bounce").replace("rotection from", "ro").replace("huffle your library", "huffle")
+                    squished_rules_text = squished_rules_text.replace("his or her", "their").replace("to your mana pool", "").replace("source", "src")
+                    squished_rules_text = squished_rules_text.replace("artifact", "art").replace("creature", "crt").replace("token", "tkn").replace("ounter", "tr").replace("ontrol", "trl")
+                    squished_rules_text = squished_rules_text.replace("nstant", "nst").replace("orcery", "orc")
+                    squished_rules_text = squished_rules_text.replace("white", "W").replace("White", "W")
+                    squished_rules_text = squished_rules_text.replace("blue", "U").replace("Blue", "U")
+                    squished_rules_text = squished_rules_text.replace("black", "B").replace("Black", "B")
+                    squished_rules_text = squished_rules_text.replace("red", "R").replace("Red", "R")
+                    squished_rules_text = squished_rules_text.replace("green", "G").replace("Green", "G")
+                    squished_rules_text = re.sub('put the top (\d+) cards of your library into your gy', 'mill \g<1>', squished_rules_text)
+                    squished_rules_text = re.sub('Return (.*?) to (their owners\'|its owner\'s) (hand|hands)', 'Bounce \g<1>', squished_rules_text)
+                    squished_rules_text = re.sub('(pow|tou|CMC) (\d+) or greater', '\g<1> >= \g<2>', squished_rules_text)
+                    if "Creature" in card.get("types", []):
+                        squished_rules_text += " - " + card.get("power", "") + "/" + card.get("toughness", "")
+                    
+                    print "- " + " - ".join([squished_rules_text.replace(". . ", ". ").replace("..", ".").replace("-  - ", " - ").replace("  ", " ")])
             except AttributeError:
                 print prepend + card
         else:
@@ -644,6 +639,9 @@ if __name__ == '__main__':
     # TODO
     # Difflib ratio
     # Foreign search
+    # FRF boosters broken
+    # DKA boosters broken
+    # FUT boosters broken
 
     # Load in all the cards
     try:
@@ -656,15 +654,22 @@ if __name__ == '__main__':
     # Loads in a list of the cards in the holiday cube
     try:
         with open('holidaycube.txt') as cube_file:
-            cube_cards = cube_file.readlines()
+            holidaycube_cards = cube_file.readlines()
     except IOError:
         print "Unable to import Holiday Cube list"
-        cube_cards = []
+        holidaycube_cards = []
+
+    try:
+        with open('2015cube.txt') as cube_file:
+            newcube_cards = cube_file.readlines()
+    except IOError:
+        print "Unable to import 2015 Cube list"
+        newcube_cards = []        
 
     # Let's make an array with the list of all the card names, to help tab completion
     allCardNames = []
     for setname in gatherer.keys():
-        allCardNames.extend([card["name"] for card in gatherer[setname]["cards"]])
+        allCardNames.extend([card["name"].replace(u"Æ", "Ae") for card in gatherer[setname]["cards"]])
     allCardNames = dedupe(allCardNames)
     print "Searching " + str(len(allCardNames)) + " unique cards"
 
@@ -696,9 +701,7 @@ if __name__ == '__main__':
     Name:
         n:Birds of Paradise
     Rules Text (Oracle):
-        o:FlyingDismember
-    {1}{B/P}{B/P}
-
+        o:Flying
         o:"First strike"
         o:{T} o:"add one mana of any color"
         (new) o:"whenever ~ deals combat damage"
@@ -725,12 +728,12 @@ if __name__ == '__main__':
         mana=3G (Spells that cost exactly 3G, or split cards that can be cast with 3G)
         mana>=2WW (Spells that cost at least two white and two colorless mana)
     #     mana<GGGGGG (Spells that can be cast with strictly less than six green mana)
-    #     mana>=2RR mana<=6RR (Spells that cost two red mana and between two and six colorless mana)
+        mana>=2RR mana<=6RR (Spells that cost two red mana and between two and six colorless mana)
     #     (new) mana>={2/R}
     #     (new) mana>={W/U}
     #     (new) mana>={U/P}
-    #     mana!{G}{G} (Spells whose mana cost contains {G}{G})
-    #     mana!P (Spells whose mana cost contains Phyrexian mana)
+        mana!{G}{G} (Spells whose mana cost contains {G}{G})
+        mana!P (Spells whose mana cost contains Phyrexian mana)
     Power, Toughness, Converted Mana Cost:
         pow>=8
         tou<pow (All combinations are possible)
@@ -741,6 +744,7 @@ if __name__ == '__main__':
     Format:
         f:standard (or block, extended, vintage, classic, legacy, modern, commander)
         banned:extended (or legal, restricted)
+        set:TPR
     Artist:
         a:"rk post"
     Is:
@@ -771,6 +775,7 @@ if __name__ == '__main__':
         print "\tallcardsextend <set> - gives the text of all the cards with a given set code (use printsets to get the code)"
         print "\tbooster <set> - gives a randomly generated booster from either set code, or set name"
         print "\t\tbooster holidaycube <number> - gives an amount of randomly generated boosters from the MTGO Holiday Cube"
+        print "\t\tbooster cube2015 <number> - gives an amount of randomly generated boosters from the MTGO 2015 Cube"
         print "\thelp - prints this help"
         print "\texit - goodbye :("
 
@@ -825,8 +830,10 @@ if __name__ == '__main__':
                     if last_was_s:
                       output += " and "
                     output += "("
+                    last_was_s = False
                 elif x == ")":
                     output += ")"
+                    last_was_s = False
                 else:
                     if last_was_s:
                         output += " and "
@@ -879,10 +886,20 @@ if __name__ == '__main__':
             if set_name.upper() in gatherer:
                 # They've kindly given us the three letter set code
                 booster = gatherer[set_name.upper()].get("booster", [])
-            elif set_name.lower().startswith("holidaycube"):
-                if cube_cards == []:
-                    print "Holiday Cube not loaded"
-                    continue
+                set_name = set_name.lower()
+            elif set_name.lower().startswith("holidaycube") or set_name.lower().startswith("cube2015"):
+                if set_name.lower().startswith("holidaycube"):
+                    if holidaycube_cards == []:
+                        print "Holiday Cube not loaded"
+                        continue
+                    else:
+                        cube_cards = holidaycube_cards
+                else:
+                    if newcube_cards == []:
+                        print "2015 Cube not loaded"
+                        continue
+                    else:
+                        cube_cards = newcube_cards
                 # Try and figure out how many boosters they want
                 # If we can't, just give them one
                 number = set_name.split(" ", 2)
@@ -906,10 +923,10 @@ if __name__ == '__main__':
                         for setname in gatherer.keys():
                             y = [x for x in gatherer[setname]["cards"] if (x["name"] == card.rstrip() or x["name"].lower() == card.lower().rstrip())]
                             if y != []:
-                                printCard(y[0])
+                                printCard(y[0], quick=True, short=True)
                                 break
                     print "-------\n"
-                pass
+                continue
             # They've probably given us the english name, let's try and find it
             else:
                 for setname in gatherer.keys():
@@ -917,7 +934,7 @@ if __name__ == '__main__':
                         booster = gatherer[setname].get("booster", [])
                         set_name = setname.lower()
             if booster != None and booster != []:
-                if set_name != "vma" and set_name != "mma":
+                if set_name != "vma" and set_name != "mma" and set_name != "fut":
                     # 25% chance of having a foil
                     isFoil = (random.randint(1, 4) == 1)
                     if isFoil:
@@ -945,27 +962,27 @@ if __name__ == '__main__':
                             rarity = "land"
                         else:
                             print "Weird list of rarities: "
-                            print rarity
                             rarity = rarity[0]
                     try:
                         if set_name == "isd":
                             card = random.choice([x for x in gatherer[set_name.upper()]["cards"] if x["rarity"].lower() == rarity.lower() and x["layout"].lower() == "normal" and x["name"] not in already_picked])
                         else:
                             card = random.choice([x for x in gatherer[set_name.upper()]["cards"] if x["rarity"].lower() == rarity.lower() and "Conspiracy" not in x.get("types", []) and x["name"] not in already_picked])
-                        printCard(card, prepend=rarity[0].upper() + ": ")
+                        printCard(card, prepend=rarity[0].upper() + ": ", short=True)
                         already_picked.append(card.get("name", ""))
                     except IndexError:
                         if rarity == "land":
                             print "L: " + random.choice(["Plains", "Island", "Swamp", "Mountain", "Forest"])
                         elif rarity == "foil" and set_name == "vma":
                             card = random.choice([x for x in gatherer[set_name.upper()]["cards"]  if x["name"] not in ["Black Lotus", "Timetwister", "Ancestral Recall", "Mox Ruby", "Mox Jet", "Mox Emerald", "Mox Sapphire", "Mox Pearl", "Time Walk"]])
-                            printCard(card, prepend="Foil ")
+                            printCard(card, prepend="Foil ", short=True)
                         elif rarity == "foil":
                             card = random.choice([x for x in gatherer[set_name.upper()]["cards"]] + ["Plains", "Island", "Swamp", "Mountain", "Forest"])
-                            printCard(card, prepend="Foil ")
+                            printCard(card, prepend="Foil " + card.get("rarity", "")[0].upper() + ": ", short=True)
                         elif rarity == "draft-matters":
                             card = random.choice([x for x in gatherer[set_name.upper()]["cards"] if "Conspiracy" in x.get("types", [])])
-                            print "Conspiracy (" + card.get("rarity", "")[0].upper() + "): " + card.get("name", "")
+                            #print "Conspiracy (" + card.get("rarity", "")[0].upper() + "): " + card.get("name", "")
+                            printCard(card, prepend="Conspiracy (" + card.get("rarity", "")[0].upper() + "): ", short=True)
                         elif rarity == "marketing":
                             pass
                         elif rarity == "power nine":
@@ -977,10 +994,10 @@ if __name__ == '__main__':
                             print extra + "Power 9! : " + card.get("name", "") + " (" + card.get("manaCost", "") + ")"
                         elif rarity.startswith("foil") and set_name == "mma":
                             card = random.choice([x for x in gatherer[set_name.upper()]["cards"] if x["rarity"].lower() == rarity[5:]])
-                            printCard(card, prepend="Foil ")
+                            printCard(card, prepend="Foil ", short=True)
                         elif rarity == "double faced":
                              card = random.choice([x for x in gatherer[set_name.upper()]["cards"] if x["layout"].lower() == "double-faced" and x.get("cmc", 0) != 0])
-                             printCard(card, prepend="D: ")
+                             printCard(card, prepend="D: ", short=True)
                         else:
                             # No idea what we've encountered
                             print "Rarity: " + rarity
@@ -1018,6 +1035,12 @@ if __name__ == '__main__':
                     yy = [x for x in gatherer[setname]["cards"] if (x["name"].replace(u"Æ", "Ae") == card_name.rstrip() or x["name"].replace(u"Æ", "Ae").lower() == card_name.lower().rstrip())]
                     if yy != []:
                         print yy
+                    elif card_name.rstrip().upper() in gatherer:
+                        x = gatherer[card_name.rstrip().upper()].copy()
+                        x["cards"] = {}
+                        print x
+                        del x
+                        break
                 else:
                     y = [x for x in gatherer[setname]["cards"] if (x["name"].replace(u"Æ", "Ae") == card_name.rstrip() or x["name"].replace(u"Æ", "Ae").lower() == card_name.lower().rstrip())]
             except sre_constants.error:
