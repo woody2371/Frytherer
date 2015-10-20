@@ -95,6 +95,7 @@ def calculateCMC(manaCost):
                     else:
                         cmc += len(input_array[idx])
     except:
+        print "Some type of error calculating CMC. Tell Fry"
         print sys.exc_info()
     return cmc
 
@@ -110,14 +111,17 @@ def new_filter_function(terms):
             sql_query += " NOT("
             was_not = True
         else:
+
+# [{u'legality': u'Legal', u'format': u'Commander'}, {u'legality': u'Legal', u'format': u'Freeform'}, {u'legality': u'Legal', u'format': u'Legacy'}, {u'legality': u'Legal', u'format': u'Modern'}, {u'legality': u'Legal', u'format': u'Prismatic'}, {u'legality': u'Legal', u'format': u'Singleton 100'}, {u'legality': u'Legal', u'format': u'Standard'}, {u'legality': u'Legal', u'format': u'Theros Block'}, {u'legality': u'Legal', u'format': u'Tribal Wars Legacy'}, {u'legality': u'Legal', u'format': u'Tribal Wars Standard'}, {u'legality': u'Legal', u'format': u'Vintage'}]
+
             if term.startswith("banned:"):
-                sql_query += "legalities LIKE '%u''" + term[7:].title() + "'': u''Banned''%'"
+                sql_query += "legalities LIKE '%u''legality'': u''Banned'', u''format'': u''" + term[7:].title() + "''%'"
             elif term.startswith("legal:"):
-                sql_query += "legalities LIKE '%u''" + term[6:].title() + "'': u''Legal''%'"
+                sql_query += "legalities LIKE '%u''legality'': u''Legal'', u''format'': u''" + term[6:].title() + "''%'"
             elif term.startswith("restricted:"):
-                sql_query += "legalities LIKE '%u''" + term[11:].title() + "'': u''Restricted''%'"
+                sql_query += "legalities LIKE '%u''legality'': u''Restricted'', u''format'': u''" + term[11:].title() + "''%'"
             elif term.startswith("set:"):
-                sql_query += "printings LIKE '%u''" + term[4:].title() + "''%'"
+                sql_query += "(\"set\" = '" + term[4:] + "' OR printings LIKE '%" + term[4:].title() + "%')"
             elif term.startswith("pow"):
                 # Need to do maths, so convert to number
                 if term[3:].startswith(">") or term[3:].startswith("<"):
@@ -145,11 +149,11 @@ def new_filter_function(terms):
             elif term.startswith("n:"):
                 sql_query += "name LIKE '%" + term[2:].replace('"', '') + "%'"
             elif term.startswith("t:"):
-                sql_query += "types LIKE '%" + term[2:].replace('"', '') + "%'"
+                sql_query += "type LIKE '%" + term[2:].replace('"', '') + "%'"
             elif term.startswith("r:"):
-                sql_query += "rarity = " + term[2:].replace('"', "").title()
+                sql_query += "rarity = '" + term[2:].replace('"', "").title() + "'"
             elif term.startswith("f:"):
-                sql_query += "legalities LIKE '%u''" + term[2:].title() + "'': u''Legal''%'"
+                sql_query += "legalities LIKE '%u''legality'': u''Legal'', u''format'': u''" + term[2:].title() + "''%'"
             elif term.startswith("a:"):
                 sql_query += "artist LIKE '%" + term[2:].replace('"', "") + "%' "
             elif term.startswith("is:"):
@@ -157,17 +161,17 @@ def new_filter_function(terms):
                 if term[3:].lower() in ["split", "flip"]:
                     sql_query += "layout = " + term[3:].lower()
                 elif term[3:] == "vanilla":
-                    sql_query += "text = '' AND types LIKE '%u''Creature''%'"
+                    sql_query += "(text = '' AND types LIKE '%u''Creature''%')"
                 elif term[3:] == "timeshifted":
-                    sql_query += "rarity = 'Special' AND printings LIKE '%Timeshifted%'"
+                    sql_query += "(rarity = 'Special' AND printings LIKE '%Timeshifted%')"
                 elif term[3:] == "funny":
-                    sql_query += "printings LIKE '%Happy Holidays%' OR printings LIKE '%Unglued%' or printings LIKE '%Unhinged%'"
+                    sql_query += "(printings LIKE '%Happy Holidays%' OR printings LIKE '%Unglued%' or printings LIKE '%Unhinged%')"
                 elif term[3:] == "promo":
-                    sql_query += "source != '' AND source NOT LIKE '%Theme%'"
+                    sql_query += "(source != '' AND source NOT LIKE '%Theme%')"
                 elif term[3:] == "permanent":
-                    sql_query += "types LIKE '%Creature%' OR types LIKE '%Artifact%' OR types LIKE '%Enchantment%' OR types LIKE '%Planeswalker%' OR types LIKE '%Land%'"
+                    sql_query += "(types LIKE '%Creature%' OR types LIKE '%Artifact%' OR types LIKE '%Enchantment%' OR types LIKE '%Planeswalker%' OR types LIKE '%Land%')"
                 elif term[3:] == "spell":
-                    sql_query += "types LIKE '%Sorcery%' OR types LIKE '%Instant%'"
+                    sql_query += "(types LIKE '%Sorcery%' OR types LIKE '%Instant%')"
             elif term.startswith("c"):
                 op = ""
                 query_term = []
@@ -206,7 +210,7 @@ def new_filter_function(terms):
     if sql_query.endswith("AND ") or sql_query.endswith("WHERE "):
         sql_query += "1=1"
     sql_query += " GROUP BY name"
-    #print sql_query
+    print sql_query
     cards = c.execute(sql_query).fetchall()
     if len(do_later) > 0:
         return_cards = []
@@ -260,7 +264,7 @@ def new_filter_function(terms):
                     # Calculate CMC of input string
                     cmc = calculateCMC(input_string)
 
-                    # See if card only has generic mana
+                     # See if card only has generic mana
                     if len(ast.literal_eval(card["colors"])) == 0:
                         # If so, compare CMC of card to CMC of input string
                         if term[4:].startswith(">="):
@@ -333,7 +337,7 @@ if __name__ == '__main__':
         except IndexError:
             return default
 
-    def printCard(card, extend=0, prepend="", quick=True, short=False):
+    def printCard(card, extend=0, prepend="", quick=True, short=False, ret=False):
         Types = ast.literal_eval(card["types"])
         Names = ast.literal_eval(card["names"])
         Colors = ast.literal_eval(card["colors"])
@@ -342,18 +346,18 @@ if __name__ == '__main__':
         Printings = ast.literal_eval(card["printings"])
         Rulings = ast.literal_eval(card["rulings"])
         Legalities = ast.literal_eval(card["legalities"])
-        ForeignNames = ast.literal_eval(card["foreignNames"])
         if quick:
             try:
                 if not short:
                     print prepend + card["name"] + " (" + card["manaCost"] + ")"
                 else:
                     # Do some MODO-like compression of rules text to get it to fit
-                    print prepend + card["name"],
-                    if "/" in card["manaCost"]:
-                        print "(" + card["manaCost"] + ")",
-                    else:
-                        print "(" + card["manaCost"].replace("{", "").replace("}", "") + ")",
+                    if not ret:
+                        print prepend + card["name"],
+                        if "/" in card["manaCost"]:
+                            print "(" + card["manaCost"] + ")",
+                        else:
+                            print "(" + card["manaCost"].replace("{", "").replace("}", "") + ")",
                     squished_rules_text = " ".join([x[0] for x in Types])
                     squished_rules_text += " - " + card["text"].replace("\n", ". ").replace(card["name"], "~").replace("{", "").replace("}", "")
                     squished_rules_text = re.sub('\(.*?\)', '', squished_rules_text)
@@ -368,7 +372,7 @@ if __name__ == '__main__':
                     squished_rules_text = squished_rules_text.replace("is equal to", "=").replace("equal to", "=").replace(" and ", " & ")
                     squished_rules_text = squished_rules_text.replace(" one ", " 1 ").replace(" two ", " 2 ").replace(" three ", " 3 ").replace(" four ", " 4 ").replace(" five ", " 5 ")
                     squished_rules_text = squished_rules_text.replace("battlefield", "bf").replace("opponent", "opp").replace("damage", "dmg").replace("permanent", "perm")
-                    squished_rules_text = squished_rules_text.replace("discard a card", "discard").replace("draw a card", "cantrip").replace("Draw a card", "Cantrip")
+                    squished_rules_text = squished_rules_text.replace("Draw a card, then discard a card", "Loot").replace("discard a card", "discard").replace("draw a card", "cantrip").replace("Draw a card", "Cantrip")
                     squished_rules_text = squished_rules_text.replace("any time you could cast a sorcery", "WRAPS").replace("becomes", "=").replace("where X is", "X =")
                     squished_rules_text = squished_rules_text.replace("power", "pow").replace("toughness", "tou").replace("that card", "it").replace("that creature", "it")
                     squished_rules_text = squished_rules_text.replace("Return it to your hand", "Bounce").replace("rotection from", "ro").replace("huffle your library", "huffle")
@@ -386,6 +390,8 @@ if __name__ == '__main__':
                     if "Creature" in Types:
                         squished_rules_text += " - " + card["power"] + "/" + card["toughness"]
                     
+                    if ret:
+                        return card["name"] + " (" + card["manaCost"] + ")" + "- " + " - ".join([squished_rules_text.replace(". . ", ". ").replace("..", ".").replace("-  - ", " - ").replace("  ", " ")])
                     print "- " + " - ".join([squished_rules_text.replace(". . ", ". ").replace("..", ".").replace("-  - ", " - ").replace("  ", " ")])
             except AttributeError:
                 print card
@@ -396,8 +402,8 @@ if __name__ == '__main__':
                 print "(Half of " + " // ".join(Names) + ")"
             if(card["manaCost"]):
                 print card["manaCost"]
-            else:
-                print ", ".join(Colors)
+                if not any(word in card["manaCost"] for word in "W U B R G") and Colors != []:
+                    print ", ".join(Colors)
             #print card["rarity"]
             print " ".join(Supertypes) + (" " if Supertypes else "") + " ".join(Types) + (" - " if Subtypes else "") + " ".join(Subtypes)
             if "Creature" in Types:
@@ -409,11 +415,12 @@ if __name__ == '__main__':
             print "\n----------"
             sources = c.execute('SELECT "set", source, rarity FROM cards WHERE name = ?', (card["name"],)).fetchall()
             for p in Printings:
-                setcode = c.execute('SELECT code FROM sets WHERE name = ?', (p,)).fetchone()
-                source = next(x for x in sources if x[0] == setcode[0])
-                print p + " (" + source[2] + ((") (" + source[1] + ")") if source[1] else ")")
-
-            print "----------\n"
+                #print p
+                setcode = c.execute('SELECT name FROM sets WHERE code = ?', (p,)).fetchone()
+                #print setcode
+                source = next(x for x in sources if x[0] == p)
+                print setcode[0] + " (" + source[2] + ((") (" + source[1] + ")") if source[1] else ")")
+            print "\n----------"
             if extend > 0:
                 if card["originalText"] != card["text"]:
                     print "-----------\n"
@@ -421,18 +428,27 @@ if __name__ == '__main__':
                     print card["originalType"]
                     print "-----------\n"
                 if Rulings != []:
+                    print "\n----------"
                     for rule in Rulings:
                         print rule["text"] + "\n"
                     print "----------\n"
-                if Legalities != {}:
-                    for (k,va) in Legalities.items():
-                        print k + " : " + va
+                if Legalities != []:
+                    for l in Legalities:
+                        print l["format"] + " : " + l["legality"]
             if extend > 1:
-                print card["flavor"]
+                print "\n" + card["flavor"]
                 print "Artist: " + card["artist"] + "\n"
 
-                for fPrint in ForeignNames:
-                    print fPrint["language"].encode("utf-8") + " : " + fPrint["name"].encode("utf-8")
+                dbForeignNames = c.execute('SELECT foreignNames FROM cards WHERE name = ?', (card["name"],)).fetchall()
+                foreignNames = {}
+                for dbNameList in dbForeignNames:
+                    if dbNameList[0] != '[]':
+                        nameList = ast.literal_eval(dbNameList[0])
+                        for name in nameList:
+                            foreignNames[name["language"]] = name["name"]
+
+                for fPrint in foreignNames.items():
+                    print fPrint[0].encode("utf-8") + " : " + fPrint[1].encode("utf-8")
 
     try:
       with open('CR.txt') as data_file:
@@ -453,6 +469,7 @@ if __name__ == '__main__':
     # FRF boosters broken
     # DKA boosters broken
     # FUT boosters broken
+    # Sealed pool generator
 
     # Try open the database
     try:
@@ -503,7 +520,6 @@ if __name__ == '__main__':
                 printings TEXT,
                 'set' TEXT,
                 layout TEXT,
-                printingCodes TEXT,
                 artist TEXT,
                 multiverseid NUMERIC,
                 foreignNames TEXT,
@@ -527,7 +543,8 @@ if __name__ == '__main__':
                 watermark TEXT,
                 rulings TEXT,
                 loyalty NUMERIC,
-                source TEXT
+                source TEXT,
+                starter TEXT
                     )""")
 
         for setname in gatherer.keys():
@@ -541,7 +558,7 @@ if __name__ == '__main__':
                 c.execute("""
                     INSERT INTO cards VALUES (
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-                    )""", (card['name'].replace(u"Æ", "Ae").replace(u"à", "a").encode('utf-8'), str(card.get('names', [])), str(card.get('printings', [])), s['code'].encode('utf-8'), card.get('layout', '').encode('utf-8'), str(card.get('printingCodes', [])), card['artist'].encode('utf-8'), card.get('multiverseid', 0), str(card.get('foreignNames', [])), card.get('cmc', 0), card.get('number', '').encode('utf-8'), card['rarity'].encode('utf-8'), str(card.get('colors', [])), card['imageName'].encode('utf-8'), card.get('text', '').encode('utf-8'), card.get('originalText', '').encode('utf-8'), card.get('manaCost', '').encode('utf-8'), card['type'].encode('utf-8'), card.get('originalType', '').encode('utf-8'), card.get('flavor', '').encode('utf-8'), str(card.get('types', [])), str(card.get('subtypes', [])), str(card.get('supertypes', [])), str(card.get('legalities', [])), card.get('power', '').encode('utf-8'), card.get('toughness', '').encode('utf-8'), card.get('watermark', '').encode('utf-8'), str(card.get('rulings', [])), card.get('loyalty', 0), card.get('source', '').encode('utf-8')))
+                    )""", (card['name'].replace(u"Æ", "Ae").replace(u"á", "a").encode('utf-8'), str(card.get('names', [])), str(card.get('printings', [])), s['code'].encode('utf-8'), card.get('layout', '').encode('utf-8'), card['artist'].encode('utf-8'), card.get('multiverseid', 0), str(card.get('foreignNames', [])), card.get('cmc', 0), card.get('number', '').encode('utf-8'), card['rarity'].encode('utf-8'), str(card.get('colors', [])), card['imageName'].encode('utf-8'), card.get('text', '').encode('utf-8'), card.get('originalText', '').encode('utf-8'), card.get('manaCost', '').encode('utf-8'), card['type'].encode('utf-8'), card.get('originalType', '').encode('utf-8'), card.get('flavor', '').encode('utf-8'), str(card.get('types', [])), str(card.get('subtypes', [])), str(card.get('supertypes', [])), str(card.get('legalities', [])), card.get('power', '').encode('utf-8'), card.get('toughness', '').encode('utf-8'), card.get('watermark', '').encode('utf-8'), str(card.get('rulings', [])), card.get('loyalty', 0), card.get('source', '').encode('utf-8'), str(card.get('starter', '')).encode('utf-8')))
         
         c.execute('CREATE INDEX cardindex ON cards (name)')
         c.execute('CREATE INDEX cardsetindex ON cards (\"set\")')
@@ -669,6 +686,7 @@ if __name__ == '__main__':
         print "\tt <text> - search rules text of cards"
         print "\tr <text> - search the comprehensive rules for text (allows for regexps)"
         print "\ts <text> - advanced search for cards with particular characteristics.  Type helpsearch for info"
+        print "\t\tqs <text> - same as above but only give card names"
         print "\trandom - gives a random card"
         print "\tprintsets - gives a list of all the sets I know about"
         print "\tprintsetsinorder - gives a list of all the sets in release date order"
@@ -699,6 +717,8 @@ if __name__ == '__main__':
         match = False
         # Search terms instead of name
         search = False
+        # Print full matches
+        quick = False
 
         if card_name.startswith("t "):
             text = True
@@ -709,9 +729,13 @@ if __name__ == '__main__':
         elif card_name.endswith("*"):
             match = True
             card_name = card_name[:-1]
-        elif card_name.startswith("s "):
+        elif card_name.startswith("s ") or card_name.startswith("qs "):
             search = True
-            card_name = card_name[2:].lower()
+            if card_name.startswith("qs "):
+                quick = True
+                card_name = card_name[3:].lower()
+            else:
+                card_name = card_name[2:].lower()
             #output = ""
             output = []
             try:
@@ -768,10 +792,15 @@ if __name__ == '__main__':
             continue
         elif card_name.startswith("allcards"):
             # Print out all the cards in a given set
-            set_name = card_name.split(" ")[1]
+            if card_name.rstrip() == "allcards":
+                continue
+            set_name = card_name[9:].upper()
+            # Try and look up the set name
+            if set_name not in allSets.keys():
+                setname = next((code for code, name in allSets.items() if name.lower() == set_name.lower()), None)
+                if setname != None:
+                    set_name = setname                
             try:
-                # TODO: Case insensitivity for set names
-                #cardlist = dedupe([x for x in gatherer[set_name]["cards"]], lambda x: x.get("name", ""))
                 i = 0
                 cardlist = c.execute('SELECT * FROM cards WHERE "set" = ? GROUP BY name', (set_name,))
                 for card in c.fetchall():
@@ -781,8 +810,16 @@ if __name__ == '__main__':
             except KeyError:
                 print "Set not found"
             pass
-        elif card_name.startswith("booster"):
-            set_name = card_name[8:]
+        elif card_name.startswith("booster") or card_name.startswith("sealedpool"):
+            if card_name.startswith("booster"):
+                numboosters = 1
+            else:
+                numboosters = 6
+                sealedpool = []
+            if numboosters == 1:
+                set_name = card_name[8:]
+            else:
+                set_name = card_name[11:]
             booster = None
             already_picked = []
             if set_name.upper() in allSets.keys():
@@ -845,95 +882,161 @@ if __name__ == '__main__':
                     print "Couldn't understand what set you wanted"
                     continue
             if booster != None and booster != []:
-                if set_name != "vma" and set_name != "mma" and set_name != "mm2":
-                    # 25% chance of having a foil
-                    isFoil = (random.randint(1, 4) == 1)
-                    if isFoil:
-                        newbooster = booster[:]
-                        # Replace a common with a foil
-                        if set_name == "fut":
-                            newbooster[-1] = "foil"
-                        else:
-                            newbooster[len(booster) - booster[::-1].index("common") - 1] = "foil"
-                        booster = newbooster
-                for rarity in booster:
-                    if type(rarity) is list:
-                        if len(rarity) == 2 and ("rare" in rarity) and ("mythic rare" in rarity):
-                            # 7 : 1 chance of a mythic in a booster
-                            weighted_choices = [('rare', 7), ('mythic rare', 1)]
+                for i in xrange(numboosters):
+                    if set_name != "vma" and set_name != "mma" and set_name != "mm2":
+                        # 25% chance of having a foil
+                        isFoil = (random.randint(1, 4) == 1)
+                        if isFoil:
+                            newbooster = booster[:]
+                            # Replace a common with a foil
+                            if set_name == "fut":
+                                newbooster[-1] = "foil"
+                            else:
+                                newbooster[len(booster) - booster[::-1].index("common") - 1] = "foil"
+                            booster = newbooster
+                    for rarity in booster:
+                        if type(rarity) is list:
+                            if len(rarity) == 2 and ("rare" in rarity) and ("mythic rare" in rarity):
+                                # 7 : 1 chance of a mythic in a booster
+                                weighted_choices = [('rare', 7), ('mythic rare', 1)]
+                                population = [val for val, cnt in weighted_choices for i in range(cnt)]
+                                rarity = random.choice(population)
+                            elif len(rarity) == 2 and set_name == "vma":
+                                # One in 53 chance of power 9
+                                weighted_choices = [('foil', 52), ('power nine', 1)]
+                                population = [val for val, cnt in weighted_choices for i in range(cnt)]
+                                rarity = random.choice(population)
+                            elif len(rarity) == 4 and set_name == "mma" or set_name == "mm2":
+                                weighted_choices = [('foil mythic rare', 1), ('foil rare', 5), ('foil uncommon', 12), ('foil common', 18)]
+                                population = [val for val, cnt in weighted_choices for i in range(cnt)]
+                                rarity = random.choice(population)
+                            elif len(rarity) == 2 and set_name == "isd":
+                                rarity = "land"
+                            elif len(rarity) == 2 and set_name == "fut":
+                                rarity = rarity[0]
+                            else:
+                                print "Weird list of rarities: " + str(rarity)
+                                rarity = rarity[0]
+                        if rarity == "land":
+                            if set_name == "frf":
+                                card = c.execute('SELECT * FROM cards WHERE "set" = ? AND types LIKE \'%Land%\' AND name NOT IN (' + ",".join(['"' + x + '"' for x in already_picked]) + ') ORDER BY RANDOM() LIMIT 1', (set_name.upper(),)).fetchone()
+                                if numboosters > 1:
+                                    sealedpool.append(card)
+                                else:
+                                    printCard(card, prepend="L: ", short=True)
+                            elif set_name == "dgm":
+                                card = c.execute('SELECT * FROM cards WHERE "set" = ? AND types LIKE \'%Land%\'', (set_name.upper(),)).fetchone()
+                                if numboosters > 1:
+                                    sealedpool.append(card)
+                                else:
+                                    printCard(card, prepend="L: ", short=True)
+                            elif set_name == "bfz":
+                                weighted_choices = [('land', 259), ('expedition', 1)]
+                                population = [val for val, cnt in weighted_choices for i in range(cnt)]
+                                rarity = random.choice(population)
+                                if rarity == "land":
+                                    if numboosters > 1:
+                                        sealedpool.append(card)
+                                    else:
+                                        print "L: " + random.choice(["Plains", "Island", "Swamp", "Mountain", "Forest"])
+                                else:
+                                    card = c.execute('SELECT * FROM cards WHERE "set" = \'EXP\' ORDER BY RANDOM() LIMIT 1').fetchone()
+                                    if numboosters > 1:
+                                        sealedpool.append(card)
+                                    else:
+                                        printCard(card, prepend="EXP: ", short=True)
+                            else:
+                                if numboosters > 1:
+                                    sealedpool.append(random.choice(["Plains", "Island", "Swamp", "Mountain", "Forest"]))
+                                else:
+                                    print "L: " + random.choice(["Plains", "Island", "Swamp", "Mountain", "Forest"])
+                            continue
+                        elif rarity == "foil" and set_name == "vma":
+                            card = c.execute('SELECT * FROM cards WHERE "set" = ? AND name NOT IN ("Black Lotus", "Timetwister", "Ancestral Recall", "Mox Ruby", "Mox Jet", "Mox Emerald", "Mox Sapphire", "Mox Pearl", "Time Walk") ORDER BY RANDOM() LIMIT 1', (set_name.upper(),)).fetchone()
+                            if numboosters > 1:
+                                sealedpool.append(card)
+                            else:
+                                printCard(card, prepend="Foil ", short=True)
+                            continue
+                        elif rarity == "foil":
+                            card = c.execute('SELECT * FROM cards WHERE "set" = ? ORDER BY RANDOM() LIMIT 1', (set_name.upper(),)).fetchone()
+                            if numboosters > 1:
+                                sealedpool.append(card)
+                            else:
+                                printCard(card, prepend="Foil " + card["rarity"][0].upper() + ": ", short=True)
+                            continue
+                        elif rarity == "draft-matters":
+                            card = c.execute('SELECT * FROM cards WHERE "set" = ? AND types LIKE \'%Conspiracy%\' ORDER BY RANDOM() LIMIT 1', (set_name.upper(),)).fetchone()
+                            if numboosters > 1:
+                                sealedpool.append(card)
+                            else:
+                                printCard(card, prepend="Conspiracy (" + card["rarity"][0].upper() + "): ", short=True)
+                            continue
+                        elif rarity == "marketing":
+                            continue
+                        elif rarity == "power nine":
+                            card = ('SELECT * FROM cards WHERE set = ? AND name IN ("Black Lotus", "Timetwister", "Ancestral Recall", "Mox Ruby", "Mox Jet", "Mox Emerald", "Mox Sapphire", "Mox Pearl", "Time Walk") ORDER BY RANDOM() LIMIT 1', (set_name.upper(),)).fetchone()
+                            # One in 28 chance of power 9 turning into foil power 9!
+                            weighted_choices = [('', 27), ('Foil ', 1)]
                             population = [val for val, cnt in weighted_choices for i in range(cnt)]
-                            rarity = random.choice(population)
-                        elif len(rarity) == 2 and set_name == "vma":
-                            # One in 53 chance of power 9
-                            weighted_choices = [('foil', 52), ('power nine', 1)]
-                            population = [val for val, cnt in weighted_choices for i in range(cnt)]
-                            rarity = random.choice(population)
-                        elif len(rarity) == 4 and set_name == "mma" or set_name == "mm2":
-                            weighted_choices = [('foil mythic rare', 1), ('foil rare', 5), ('foil uncommon', 12), ('foil common', 18)]
-                            population = [val for val, cnt in weighted_choices for i in range(cnt)]
-                            rarity = random.choice(population)
-                        elif len(rarity) == 2 and set_name == "isd":
-                            rarity = "land"
-                        elif len(rarity) == 2 and set_name == "fut":
-                            rarity = rarity[0]
+                            extra = random.choice(population)
+                            if numboosters > 1:
+                                sealedpool.append(extra + "Power 9! : " + card["name"] + " (" + card["manaCost"] + ")")
+                            else:                            
+                                print extra + "Power 9! : " + card["name"] + " (" + card["manaCost"] + ")"
+                            continue
+                        elif rarity.startswith("foil") and (set_name == "mma" or set_name == "mm2"):
+                            card = c.execute('SELECT * FROM cards WHERE "set" = ? AND rarity = ? ORDER BY RANDOM() LIMIT 1', (set_name.upper(), rarity[5:].title())).fetchall()[0]
+                            if numboosters > 1:
+                                sealedpool.append(card)
+                            else:
+                                printCard(card, prepend="Foil ", short=True)
+                            continue
+                        elif rarity == "double faced":
+                            card = c.execute('SELECT * FROM cards WHERE "set" = ? AND layout = ? AND cmc != ? ORDER BY RANDOM() LIMIT 1', (set_name.upper(), "double-faced", 0)).fetchall()[0]
+                            if numboosters > 1:
+                                sealedpool.append(card)
+                            else:
+                                printCard(card, prepend="D: ", short=True)
+                            continue
+                        elif rarity == "urza land":
+                            card = c.execute('SELECT * FROM cards WHERE "set" = ? AND subtypes LIKE \'%Urza%\' AND name NOT IN (' + ",".join(['"' + x + '"' for x in already_picked]) + ') ORDER BY RANDOM() LIMIT 1', (set_name.upper(),)).fetchone()
+                            if numboosters > 1:
+                                sealedpool.append(card)
+                            else:
+                                printCard(card, prepend="UL: ", short=True)
+                            continue
+                        elif rarity == "timeshifted purple":
+                            card = c.execute('SELECT * FROM cards WHERE "set" = "TSB" ORDER BY RANDOM() LIMIT 1').fetchall()[0]
+                            if numboosters > 1:
+                                sealedpool.append(card)
+                            else:
+                                printCard(card, prepend="TS: ", short=True)
+                            continue
+
+                        if set_name == "isd":
+                            card = c.execute('SELECT * FROM cards WHERE "set" = ? AND rarity = ? AND layout = \'normal\' AND name NOT IN (' + ",".join(['"' + x + '"' for x in already_picked]) + ') ORDER BY RANDOM() LIMIT 1', (set_name.upper(), rarity.title())).fetchone()
+                        elif (set_name == "frf" or set_name == "dgm") and rarity == "common":
+                            card = c.execute('SELECT * FROM cards WHERE "set" = ? AND rarity = ? AND types NOT LIKE \'%Land%\' AND name NOT IN (' + ",".join(['"' + x + '"' for x in already_picked]) + ') ORDER BY RANDOM() LIMIT 1', (set_name.upper(), rarity.title())).fetchone()
                         else:
-                            print "Weird list of rarities: " + str(rarity)
-                            rarity = rarity[0]
-                    if rarity == "land":
-                        if set_name == "frf":
-                            card = c.execute('SELECT * FROM cards WHERE "set" = ? AND types LIKE \'%Land%\' AND name NOT IN (' + ",".join(['"' + x + '"' for x in already_picked]) + ') ORDER BY RANDOM() LIMIT 1', (set_name.upper(),)).fetchone()
-                            printCard(card, prepend="L: ", short=True)
-                        elif set_name == "dgm":
-                            card = c.execute('SELECT * FROM cards WHERE "set" = ? AND types LIKE \'%Land%\'', (set_name.upper(),)).fetchone()
-                            printCard(card, prepend="L: ", short=True)
-                        else:
-                            print "L: " + random.choice(["Plains", "Island", "Swamp", "Mountain", "Forest"])
-                        continue
-                    elif rarity == "foil" and set_name == "vma":
-                        card = c.execute('SELECT * FROM cards WHERE "set" = ? AND name NOT IN ("Black Lotus", "Timetwister", "Ancestral Recall", "Mox Ruby", "Mox Jet", "Mox Emerald", "Mox Sapphire", "Mox Pearl", "Time Walk") ORDER BY RANDOM() LIMIT 1', (set_name.upper(),)).fetchone()
-                        printCard(card, prepend="Foil ", short=True)
-                        continue
-                    elif rarity == "foil":
-                        card = c.execute('SELECT * FROM cards WHERE "set" = ? ORDER BY RANDOM() LIMIT 1', (set_name.upper(),)).fetchone()
-                        printCard(card, prepend="Foil " + card["rarity"][0].upper() + ": ", short=True)
-                        continue
-                    elif rarity == "draft-matters":
-                        card = c.execute('SELECT * FROM cards WHERE "set" = ? AND types LIKE \'%Conspiracy%\' ORDER BY RANDOM() LIMIT 1', (set_name.upper(),)).fetchone()
-                        printCard(card, prepend="Conspiracy (" + card["rarity"][0].upper() + "): ", short=True)
-                        continue
-                    elif rarity == "marketing":
-                        continue
-                    elif rarity == "power nine":
-                        card = ('SELECT * FROM cards WHERE set = ? AND name IN ("Black Lotus", "Timetwister", "Ancestral Recall", "Mox Ruby", "Mox Jet", "Mox Emerald", "Mox Sapphire", "Mox Pearl", "Time Walk") ORDER BY RANDOM() LIMIT 1', (set_name.upper(),)).fetchone()
-                        # One in 28 chance of power 9 turning into foil power 9!
-                        weighted_choices = [('', 27), ('Foil ', 1)]
-                        population = [val for val, cnt in weighted_choices for i in range(cnt)]
-                        extra = random.choice(population)
-                        print extra + "Power 9! : " + card["name"] + " (" + card["manaCost"] + ")"
-                        continue
-                    elif rarity.startswith("foil") and (set_name == "mma" or set_name == "mm2"):
-                        card = c.execute('SELECT * FROM cards WHERE "set" = ? AND rarity = ? ORDER BY RANDOM() LIMIT 1', (set_name.upper(), rarity[5:].title())).fetchall()[0]
-                        printCard(card, prepend="Foil ", short=True)
-                        continue
-                    elif rarity == "double faced":
-                        card = c.execute('SELECT * FROM cards WHERE "set" = ? AND layout = ? AND cmc != ? ORDER BY RANDOM() LIMIT 1', (set_name.upper(), "double-faced", 0)).fetchall()[0]
-                        printCard(card, prepend="D: ", short=True)
-                        continue
-                    elif rarity == "urza land":
-                        card = c.execute('SELECT * FROM cards WHERE "set" = ? AND subtypes LIKE \'%Urza%\' AND name NOT IN (' + ",".join(['"' + x + '"' for x in already_picked]) + ') ORDER BY RANDOM() LIMIT 1', (set_name.upper(),)).fetchone()
-                        printCard(card, prepend="UL: ", short=True)
-                        continue
+                            #print ('SELECT * FROM cards WHERE \"set\" = %s AND starter != \'True\' AND rarity = %s AND types != %s AND name NOT IN ('  % (set_name.upper(), rarity.title(), 'u[\'Conspiracy\']')) + ",".join(['"' + x + '"' for x in already_picked]) + ') ORDER BY RANDOM() LIMIT 1'
+                            card = c.execute('SELECT * FROM cards WHERE "set" = ? AND starter != \'True\' AND rarity = ? AND types != ? AND name NOT IN (' + ",".join(['"' + x + '"' for x in already_picked]) + ') ORDER BY RANDOM() LIMIT 1', (set_name.upper(), rarity.title(), 'u[\'Conspiracy\']')).fetchone()
 
-                    if set_name == "isd":
-                        card = c.execute('SELECT * FROM cards WHERE "set" = ? AND rarity = ? AND layout = \'normal\' AND name NOT IN (' + ",".join(['"' + x + '"' for x in already_picked]) + ') ORDER BY RANDOM() LIMIT 1', (set_name.upper(), rarity.title())).fetchone()
-                    elif (set_name == "frf" or set_name == "dgm") and rarity == "common":
-                        card = c.execute('SELECT * FROM cards WHERE "set" = ? AND rarity = ? AND types NOT LIKE \'%Land%\' AND name NOT IN (' + ",".join(['"' + x + '"' for x in already_picked]) + ') ORDER BY RANDOM() LIMIT 1', (set_name.upper(), rarity.title())).fetchone()
-                    else:
-                        card = c.execute('SELECT * FROM cards WHERE "set" = ? AND rarity = ? AND types != ? AND name NOT IN (' + ",".join(['"' + x + '"' for x in already_picked]) + ') ORDER BY RANDOM() LIMIT 1', (set_name.upper(), rarity.title(), 'u[\'Conspiracy\']')).fetchone()
+                        if card != None:
+                            if numboosters > 1:
+                                sealedpool.append(card)
+                            else:
+                                printCard(card, prepend=rarity[0].upper() + ": ", short=True)
+                            already_picked.append(card["name"])
 
-                    printCard(card, prepend=rarity[0].upper() + ": ", short=True)
-                    already_picked.append(card["name"])
-
+                if numboosters > 1:
+                    sealed_text = []
+                    for card in sealedpool:
+                        sealed_text.append(printCard(card, short=True, ret=True))
+                    for card in sorted(sealed_text):
+                        print card
+                    sealedpool = []
+                    sealed_text = []
             else:
                 print "It doesn't appear this set came in boosters\n"
             pass
@@ -952,10 +1055,11 @@ if __name__ == '__main__':
         elif match:
             cards = c.execute('SELECT * FROM cards WHERE name LIKE ? GROUP BY name', ('%' + card_name + '%',)).fetchall()
         elif not search:
-            cards = c.execute('SELECT * FROM cards WHERE name = ? OR name = ? LIMIT 1', (card_name.replace(u"Æ", "Ae"), gathererCapitalise(card_name.replace(u"Æ", "Ae")),)).fetchall()
+            cards = c.execute('SELECT * FROM cards WHERE name = ? OR name = ? LIMIT 1', (card_name.strip().replace(u"Æ", "Ae"), gathererCapitalise(card_name.strip().replace(u"Æ", "Ae")),)).fetchall()
 
         if cards != []:
             for card in cards:
-                printCard(card, quick=False, extend=(2 if extend else 0))
-                print "\n"
+                printCard(card, quick=quick, extend=(2 if extend else 0))
+                if not quick:
+                    print "\n"
             print str(len(cards)) + " result/s"
