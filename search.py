@@ -111,9 +111,6 @@ def new_filter_function(terms):
             sql_query += " NOT("
             was_not = True
         else:
-
-# [{u'legality': u'Legal', u'format': u'Commander'}, {u'legality': u'Legal', u'format': u'Freeform'}, {u'legality': u'Legal', u'format': u'Legacy'}, {u'legality': u'Legal', u'format': u'Modern'}, {u'legality': u'Legal', u'format': u'Prismatic'}, {u'legality': u'Legal', u'format': u'Singleton 100'}, {u'legality': u'Legal', u'format': u'Standard'}, {u'legality': u'Legal', u'format': u'Theros Block'}, {u'legality': u'Legal', u'format': u'Tribal Wars Legacy'}, {u'legality': u'Legal', u'format': u'Tribal Wars Standard'}, {u'legality': u'Legal', u'format': u'Vintage'}]
-
             if term.startswith("banned:"):
                 sql_query += "legalities LIKE '%u''legality'': u''Banned'', u''format'': u''" + term[7:].title() + "''%'"
             elif term.startswith("legal:"):
@@ -133,11 +130,12 @@ def new_filter_function(terms):
                             print "Invalid P/T inequality"   
                     sql_query += "abs(power)" + term[3:].replace("pow", "abs(power)").replace("tou", "abs(toughness)").replace("cmc", "abs(cmc)")
                 else:
-                    sql_query += "power" + term[3:].replace("pow", "power").replace("tou", "toughness")
+                    sql_query += "power" + term[3:].replace("pow", "power").replace("tou", "toughness").replace(":", "=")
             elif term.startswith("tou"):
-                sql_query += "toughness" + term[3:].replace("pow", "power").replace("tou", "toughness").replace("cmc", "abs(cmc)")
+                sql_query += "toughness" + term[3:].replace("pow", "power").replace("tou", "toughness").replace("cmc", "abs(cmc)").replace(":", "=")
+                
             elif term.startswith("cmc"):
-                sql_query += term.replace("pow", "power").replace("tou", "toughness")
+                sql_query += term.replace("pow", "power").replace("tou", "toughness").replace(":", "=")
             elif term.startswith("mana"):
                 if term[4] == "=":
                     sql_query += "replace(replace(manacost, '}', ''), '{', '') = '" + term[5:].replace("{", "").replace("}", "").upper() + "'"
@@ -199,7 +197,7 @@ def new_filter_function(terms):
                         query_term.append("types LIKE '%Land%'")
                     if y == 'c':
                         query_term.append("colors = '[]'")
-                sql_query += op.join(query_term)
+                sql_query += "(" + op.join(query_term) + ")"
             elif term.startswith("o:"):
                 sql_query += "text LIKE replace('%" + term[2:].replace('"', '') + "%', '~', name)"
             if was_not:
@@ -413,16 +411,18 @@ if __name__ == '__main__':
             print card["text"].encode('utf-8')
         if extend:
             print "\n----------"
-            sources = c.execute('SELECT "set", source, rarity FROM cards WHERE name = ?', (card["name"],)).fetchall()
+            sources = c.execute('SELECT "set", source, rarity, starter, artist, flavor FROM cards WHERE name = ?', (card["name"],)).fetchall()
             for p in Printings:
                 #print p
                 setcode = c.execute('SELECT name FROM sets WHERE code = ?', (p,)).fetchone()
                 #print setcode
                 source = next(x for x in sources if x[0] == p)
-                print setcode[0] + " (" + source[2] + ((") (" + source[1] + ")") if source[1] else ")")
+                print setcode[0] + " (" + source[2] + ((") (" + source[1] + ")") if source[1] else ")") + (" (Starter Pack)" if source[3] else "") + " [" + source[4] + "]"
+                if source[5]:
+                    print source[5]
             print "\n----------"
             if extend > 0:
-                if card["originalText"] != card["text"]:
+                if card["originalText"] != "" and (card["originalText"] != card["text"]):
                     print "-----------\n"
                     print card["originalText"]
                     print card["originalType"]
@@ -435,9 +435,7 @@ if __name__ == '__main__':
                 if Legalities != []:
                     for l in Legalities:
                         print l["format"] + " : " + l["legality"]
-            if extend > 1:
-                print "\n" + card["flavor"]
-                print "Artist: " + card["artist"] + "\n"
+                    print ""
 
                 dbForeignNames = c.execute('SELECT foreignNames FROM cards WHERE name = ?', (card["name"],)).fetchall()
                 foreignNames = {}
@@ -582,6 +580,13 @@ if __name__ == '__main__':
         print "Unable to import 2015 Cube list"
         newcube_cards = []        
 
+    try:
+        with open('legendarycube.txt') as cube_file:
+            legendarycube_cards = cube_file.readlines()
+    except IOError:
+        print "Unable to import Holiday Cube list"
+        legendarycube_cards = []
+
     # Let's make an array with the list of all the card names, to help tab completion
     c.execute('SELECT code, name FROM sets')
     allSets = {}
@@ -695,6 +700,8 @@ if __name__ == '__main__':
         print "\tbooster <set> - gives a randomly generated booster from either set code, or set name"
         print "\t\tbooster holidaycube <number> - gives an amount of randomly generated boosters from the MTGO Holiday Cube"
         print "\t\tbooster cube2015 <number> - gives an amount of randomly generated boosters from the MTGO 2015 Cube"
+        print "\t\tbooster legendarycube <number> - gives an amount of randomly generated boosters from the MTGO Legendary Cube"
+        print "\tqbooster <set> - gives a randomly generated booster from either set code, or set name, short names"
         print "\thelp - prints this help"
         print "\texit - goodbye :("
 
@@ -786,9 +793,9 @@ if __name__ == '__main__':
                 print name + " (" + code + ")"
             continue
         elif card_name == "printsetsinorder":
-            c.execute('SELECT DISTINCT(name), code FROM sets ORDER BY releaseDate ASC')
-            for name, code in [(x[0], x[1]) for x in c.fetchall()]:
-                print name + " (" + code + ")"
+            c.execute('SELECT DISTINCT(name), code, releaseDate FROM sets ORDER BY releaseDate ASC')
+            for name, code, date in [(x[0], x[1], x[2]) for x in c.fetchall()]:
+                print name + " (" + code + ")" + " [" + date + "]"
             continue
         elif card_name.startswith("allcards"):
             # Print out all the cards in a given set
@@ -802,7 +809,7 @@ if __name__ == '__main__':
                     set_name = setname                
             try:
                 i = 0
-                cardlist = c.execute('SELECT * FROM cards WHERE "set" = ? GROUP BY name', (set_name,))
+                cardlist = c.execute('SELECT * FROM cards WHERE upper("set") = ? GROUP BY name', (set_name,))
                 for card in c.fetchall():
                     printCard(card, quick=(0 if card_name.startswith("allcardsextend") else 1), extend=(1 if card_name.startswith("allcardsextend") else 0))
                     i += 1
@@ -810,14 +817,16 @@ if __name__ == '__main__':
             except KeyError:
                 print "Set not found"
             pass
-        elif card_name.startswith("booster") or card_name.startswith("sealedpool"):
-            if card_name.startswith("booster"):
+        elif card_name.startswith("booster") or card_name.startswith("qbooster") or card_name.startswith("sealedpool"):
+            if card_name.startswith("booster") or card_name.startswith("qbooster"):
                 numboosters = 1
             else:
                 numboosters = 6
                 sealedpool = []
-            if numboosters == 1:
+            if card_name.startswith("booster"):
                 set_name = card_name[8:]
+            elif card_name.startswith("qbooster"):
+                set_name = card_name[9:]
             else:
                 set_name = card_name[11:]
             booster = None
@@ -826,19 +835,25 @@ if __name__ == '__main__':
                 # They've kindly given us the three letter set code
                 booster = ast.literal_eval(c.execute('SELECT booster FROM sets WHERE code = ?', (set_name.upper(),)).fetchone()[0])
                 set_name = set_name.lower()
-            elif set_name.lower().startswith("holidaycube") or set_name.lower().startswith("cube2015"):
+            elif set_name.lower().startswith("holidaycube") or set_name.lower().startswith("cube2015") or set_name.lower().startswith("legendarycube"):
                 if set_name.lower().startswith("holidaycube"):
                     if holidaycube_cards == []:
                         print "Holiday Cube not loaded"
                         continue
                     else:
                         cube_cards = holidaycube_cards
-                else:
+                elif set_name.lower().startswith("cube2015"):
                     if newcube_cards == []:
                         print "2015 Cube not loaded"
                         continue
                     else:
                         cube_cards = newcube_cards
+                elif set_name.lower().startswith("legendarycube"):
+                    if legendarycube_cards == []:
+                        print "Legendary Cube not loaded"
+                        continue
+                    else:
+                        cube_cards = legendarycube_cards
                 # Try and figure out how many boosters they want
                 # If we can't, just give them one
                 number = set_name.split(" ", 2)
@@ -860,14 +875,18 @@ if __name__ == '__main__':
                         cubebooster.append(newcube.pop())
                     for card in cubebooster:
                         if "&" in card:
+                            print "Split Card ",
                             card = card.split(" & ")[0]
-                            print card
-                            sys.exit(1)
+                            #print card
+                            #sys.exit(1)
                         try:
                             y = c.execute('SELECT * FROM cards WHERE name = ? LIMIT 1', (card.rstrip(),)).fetchall()[0]
+                            if card_name.startswith("qbooster"):
+                                printCard(y, quick=True, short=False)
+                            else:
+                                printCard(y, quick=True, short=True)
                         except IndexError:
                             print "Unable to fetch card " + card.rstrip()
-                        printCard(y, quick=True, short=True)
                     print "-------\n"
                 continue
             # They've probably given us the english name, let's try and find it
