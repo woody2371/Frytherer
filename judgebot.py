@@ -9,6 +9,10 @@ import pysqlite2.dbapi2 as sqlite
 from slackbot.bot import Bot
 from slackbot.bot import respond_to
 from slackbot.bot import listen_to
+from six import iteritems
+
+import logging
+logging.basicConfig()
 
 def gathererCapitalise(y):
     words = y.split(" ")
@@ -297,7 +301,11 @@ def new_filter_function(terms):
         return cards
 
 if __name__ == '__main__':
-    colon_mode = oneOf("n o t cn in pow tou cmc r f a banned legal restricted is set")
+    def validate_colon_mode(s, loc, tokens):
+        if s[loc+1] != ':':
+            raise ParseFatalException(s, loc, "Mode must be followed by a colon")
+
+    colon_mode = oneOf("n o t cn in pow tou cmc r f a banned legal restricted is set").setParseAction(validate_colon_mode)
     colon_or_bang_mode = "c"
     math_mode = oneOf("mana pow tou cmc")
     colon_operator = ":"
@@ -406,7 +414,7 @@ if __name__ == '__main__':
                 message_out += card["text"].encode('utf-8').replace('\n', ' / ')
             else:
                 message_out += card["text"].encode('utf-8') + '\n'
-        if extend and not slackChannel:
+        if extend:
             message_out += "----------" + '\n'
             sources = c.execute('SELECT "set", source, rarity, starter, artist, flavor FROM cards WHERE name = ?', (card["name"],)).fetchall()
             for p in Printings:
@@ -682,19 +690,51 @@ if __name__ == '__main__':
 #    '_body', '_client', '_gen_at_message', '_get_user_id', '_plugins', 'body',
 #    'channel', 'docs_reply', 'gen_reply', 'react', 'reply', 'reply_webapi', 'send', 'send_webapi']
 
+# message.body
+# {u'text': u'!Eldritch Evolution', u'ts': u'1470809997.000042',
+# u'user': u'U1X8R7KNH', u'team': u'T1X8RK4K1', u'type': u'message', u'channel': u'G1ZSW8GL8'}
 
+# message._client
+# ['__class__', '__delattr__', '__dict__', '__doc__', '__format__', '__getattribute__',
+# '__hash__', '__init__', '__module__', '__new__', '__reduce__', '__reduce_ex__', '__repr__',
+# '__setattr__', '__sizeof__', '__str__', '__subclasshook__', '__weakref__', 'bot_emoji',
+# 'bot_icon', 'channels', 'connected', 'domain', 'find_channel_by_name', 'find_user_by_name',
+# 'get_channel', 'login_data', 'parse_channel_data', 'parse_slack_login_data', 'ping', 'react_to_message',
+# 'reconnect', 'rtm_connect', 'rtm_read', 'rtm_send_message', 'send_message', 'send_to_websocket', 'token',
+# 'upload_file', 'username', 'users', 'webapi', 'websocket', 'websocket_safe_read']
+
+# message.channel._body
+# {u'topic': {u'last_set': 0, u'value': u'', u'creator': u''}, u'name': u'testing', u'last_read': u'1470794556.000002',
+# u'creator': u'U1X8R7KNH', u'is_mpim': False, u'is_archived': False, u'created': 1470794556, u'is_group': True,
+# u'members': [u'U1X8R7KNH', u'U1ZGH9V7B'], u'unread_count': 51, u'is_open': True,
+# u'purpose': {u'last_set': 0, u'value': u'', u'creator': u''}, u'unread_count_display': 31,
+# u'latest': {u'text': u'!Island', u'type': u'message', u'user': u'U1X8R7KNH', u'ts': u'1470811285.000053'},
+# u'id': u'G1ZSW8GL8', u'has_pins': False}
 
     @listen_to('^!(.*)')
     @respond_to('(.*)')
     def handle_message(message, card_name):
         if(card_name == "" or card_name == "\n"):
             return
+        user_pm_channel = None
+        for channel_id, channel in iteritems(message._client.channels):
+            if channel.get('user', "") == message.body['user']:
+                #print "Found PM Channel!"
+                user_pm_channel = channel_id
+        if user_pm_channel == None:
+            print "Oh oh, no PM Channel"
+            print message
         channel_message = False
-        if(message.body['text'].startswith("!")):
-            print "Channel Message!"
-            print message.body
-            # Command from a channel
-            channel_message = True
+        print card_name
+        if message.body['text'].startswith("!"):
+            if user_pm_channel != message.body.get("channel", ""):
+                #print "Channel Message!"
+                if(message.body['text'].endswith(' extend') or ('printsets' in message.body['text']) or ('help' in message.body['text'])):
+                    message.body['channel'] = user_pm_channel
+                else:
+                    channel_message = True
+            else:
+                card_name = card_name[1:]
             if(rule_regexp.match(card_name)):
                 card_name = "r " + card_name
         cards = []
@@ -714,6 +754,8 @@ if __name__ == '__main__':
         if card_name.startswith("t "):
             text = True
             card_name = card_name[2:]
+        elif ("pptq-add" in card_name) or ("my pptq had" in card_name) or ("ran a pptq" in card_name):
+
         elif card_name.endswith("extend"):
             extend = True
             card_name = card_name[:-6].rstrip()
@@ -731,8 +773,8 @@ if __name__ == '__main__':
             output = []
             try:
                 parsed_data = super_total.parseString(card_name)
-            except ParseException:
-                message.reply("Unable to parse search terms")
+            except (ParseException, ParseFatalException) as e:
+                message.reply("Unable to parse search terms\n%s" % e)
                 return
 
             last_was_s = False
@@ -802,11 +844,19 @@ if __name__ == '__main__':
         if cards != []:
             message_out = ""
             for card in cards:
-                message_out += printCard(card, quick=quick, extend=(2 if extend else 0), slackChannel=True)
+                message_out += printCard(card, quick=quick, extend=(2 if extend else 0), slackChannel=True) + '\n'
             if not channel_message:
-                message_out += (str(len(cards)) + " result/s")
+                message_out += '\n' + str(len(cards)) + " result/s"
             else:
-                message_out = message_out.replace('\n', ' ')
+                if (len(cards) > 1 and not quick) or (len(cards) > 4 and quick):
+                    if len(cards) > 10 and not quick:
+                        message.reply("Too many cards to print! ({} > 10). Please narrow search".format(len(cards)))
+                        return
+                    else:
+                        message.reply("Too many cards for channel, PM'ed results")
+                        message.body['channel'] = user_pm_channel
+                else:
+                    message_out = message_out.replace('\n', ' ')
             message.reply(message_out)
 
     reload(sys)  # Reload does the trick!
