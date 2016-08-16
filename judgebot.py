@@ -14,6 +14,10 @@ from six import iteritems
 import logging
 logging.basicConfig()
 
+# TODO: !url MTR/IPG/JAR/decklist
+# Legalities in message
+# PPTQ stuff
+
 def gathererCapitalise(y):
     words = y.split(" ")
     ret_string = []
@@ -47,6 +51,7 @@ def dedupe(seq, idfun=None):
 
 mana_regexp = re.compile('([0-9]*)(b*)(g*)(r*)(u*)(w*)')
 rule_regexp = re.compile('(?:\d)+\.(?:.*)')
+section_regexp = re.compile('(aipg|amtr) (?:(appendix [a-f])|(\d)(?:(?:\.)(\d)){0,1})')
 
 # Calculate the possible mana permutations of cards
 # Used for hybrid cards when comparing mana costs)
@@ -667,21 +672,112 @@ if __name__ == '__main__':
     def help(message):
         ret = ""
         ret += "Welcome to Frytherer.  Your options are:\n"
-        ret += "\t<card name> - gives what's on the card\n"
-        ret += "\t<card name> extend - gives extended info about the card (everything - rulings, legality, artist, flavour text, foreign names)\n"
-        ret += "\t<card name>* - search card names\n"
-        ret += "\tr <text> - search the comprehensive rules for text (allows for regexps)\n"
-        ret += "\ts <text> - advanced search for cards with particular characteristics.  Type helpsearch for info\n"
-        ret += "\t\tqs <text> - same as above but only give card names\n"
-        ret += "\trandom - gives a random card\n"
-        ret += "\tprintsets - gives a list of all the sets I know about\n"
-        ret += "\tprintsetsinorder - gives a list of all the sets in release date order\n"
+        ret += "<card name> - gives what's on the card\n"
+        ret += "<card name> extend - gives extended info about the card (everything - rulings, legality, artist, flavour text, foreign names)\n"
+        ret += "<card name>* - search card names\n"
+        ret += "r <text> - search the comprehensive rules for text (allows for regexps)\n"
+        ret += "s <text> - advanced search for cards with particular characteristics.  Type helpsearch for info\n"
+        ret += "qs <text> - same as above but only give card names\n"
+        ret += "random - gives a random card\n"
+        ret += "printsets - gives a list of all the sets I know about\n"
+        ret += "printsetsinorder - gives a list of all the sets in release date order\n"
+        ret += "url <cr|mtr|amtr (<section>)|ipg|aipg (<section>)|jar|peip|pptq|rptq|alldocs> - gives the URL to the requested document"
         #ret += "\tallcards <set> - gives a list of all the cards with a given set code (use printsets to get the code)\n"
         #ret += "\tallcardsextend <set> - gives the text of all the cards with a given set code (use printsets to get the code)\n"
         #ret += "\tbooster <set> - gives a randomly generated booster from either set code, or set name\n"
         #ret += "\tqbooster <set> - gives a randomly generated booster from either set code, or set name, short names\n"
-        ret += "\thelp - prints this help\n"
+        ret += "help - prints this help\n"
         message.reply(ret)
+
+    def url(document, message):
+        if document == "mtr":
+            message.reply("http://wpn.wizards.com/sites/wpn/files/attachements/mtg_mtr_22jul16_en.pdf")
+        elif document == "ipg":
+            message.reply("http://wpn.wizards.com/sites/wpn/files/attachements/mtg_ipg_22jul16_en.pdf")
+        elif document == "jar":
+            message.reply("http://wpn.wizards.com/sites/wpn/files/attachements/mtg_jar_4.pdf")
+        elif document == "peip":
+            message.reply("http://wpn.wizards.com/sites/wpn/files/attachements/mtg_peip-16_16feb8_en.pdf")
+        elif document == "cr":
+            message.reply("http://yawgatog.com/resources/magic-rules/")
+        elif document == "alldocs":
+            message.reply("http://wpn.wizards.com/en/resources/rules-documents")
+        elif document == "pptq":
+            mesage.reply("http://magic.wizards.com/en/events/instoreplay/pptqaer")
+        elif document == "rptq":
+            message.reply("http://magic.wizards.com/en/events/instoreplay/rptqaer")
+        elif document == "aipg":
+            message.reply("http://blogs.magicjudges.org/rules/ipg/")
+        elif document == "amtr":
+            message.reply("http://blogs.magicjudges.org/rules/mtr/")
+        elif section_regexp.match(document):
+            try:
+                (doco, appendix, main, sub) = (section_regexp.match(document)).groups()
+                if doco == "aipg":
+                    if appendix:
+                        (app, letter) = appendix.split(" ")
+                        if (letter != "a" and letter != "b"):
+                            message.reply("Invalid section requested")
+                        else:
+                            message.reply("http://blogs.magicjudges.org/rules/ipg-%s-%s/" % (app, letter))
+                        return
+                    main = int(main)
+                    if (main >= 1) and (main <= 4):
+                        if sub == None:
+                            message.reply("http://blogs.magicjudges.org/rules/ipg%d/" % main)
+                        else:
+                            sub = int(sub)
+                            if(
+                                (main == 1 and (sub >= 1 and sub <= 4)) or
+                                (main == 2 and (sub >= 1 and sub <= 6)) or
+                                (main == 3 and (sub >= 1 and sub <= 8)) or
+                                (main == 4 and (sub >= 1 and sub <= 8))
+                            ):
+                                message.reply("http://blogs.magicjudges.org/rules/ipg%d-%d" % (main, sub))
+                            else:
+                                message.reply("Invalid section requested")
+                    else:
+                        message.reply("Invalid section requested")
+                elif doco == "amtr":
+                    if appendix:
+                        (app, letter) = appendix.split(" ")
+                        if(letter != "a" and letter != "b" and letter != "c" and letter != "d" and letter != "e" and letter != "f"):
+                            message.reply("Invalid section requested")
+                        else:
+                            message.reply("http://blogs.magicjudges.org/rules/mtr-%s-%s/" % (app, letter))
+                            return
+                    main = int(main)
+                    if (main >= 1 and main <= 10):
+                        if sub == None:
+                            message.reply("Invalid section requested")
+                        else:
+                            sub = int(sub)
+                            if(
+                                (main == 1 and (sub >= 1 and sub <= 12)) or
+                                (main == 2 and (sub >= 1 and sub <= 14)) or
+                                (main == 3 and (sub >= 1 and sub <= 15)) or
+                                (main == 4 and (sub >= 1 and sub <= 5)) or
+                                (main == 5 and (sub >= 1 and sub <= 5)) or
+                                (main == 6 and (sub >= 1 and sub <= 7)) or
+                                (main == 7 and (sub >= 1 and sub <= 7)) or
+                                (main == 8 and (sub >= 1 and sub <= 6)) or
+                                (main == 9 and (sub >= 1 and sub <= 7)) or
+                                (main == 10 and (sub >= 1 and sub <= 4))
+                            ):
+                                message.reply("http://blogs.magicjudges.org/rules/mtr%d-%d" % (main, sub))
+                            else:
+                                message.reply("Invalid section requested")
+                    else:
+                        message.reply("Invalid section requested")
+                else:
+                    message.reply("Something went wrong parsing your request")
+            except:
+                print sys.exc_info()
+                message.reply("Something went wrong parsing your request")
+        else:
+            message.reply("I didn't understand what document you wanted")
+        return
+
 
 # Message = ['__class__', '__delattr__', '__dict__', '__doc__',
 #    '__format__', '__getattribute__', '__hash__', '__init__',
@@ -754,8 +850,7 @@ if __name__ == '__main__':
         if card_name.startswith("t "):
             text = True
             card_name = card_name[2:]
-        elif ("pptq-add" in card_name) or ("my pptq had" in card_name) or ("ran a pptq" in card_name):
-
+        #elif ("pptq-add" in card_name) or ("my pptq had" in card_name) or ("ran a pptq" in card_name):
         elif card_name.endswith("extend"):
             extend = True
             card_name = card_name[:-6].rstrip()
@@ -832,6 +927,10 @@ if __name__ == '__main__':
             pass
         elif card_name == "helpsearch":
             helpsearch(message)
+            pass
+        elif card_name.startswith("url "):
+            card_name = card_name[4:]
+            url(card_name.lower(), message)
             pass
 
         if text:
