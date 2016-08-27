@@ -10,12 +10,12 @@ from slackbot.bot import Bot
 from slackbot.bot import respond_to
 from slackbot.bot import listen_to
 from six import iteritems
+import requests
 
 import logging
 logging.basicConfig()
 
-# TODO: !url MTR/IPG/JAR/decklist
-# Legalities in message
+# TODO: # Legalities in message
 # PPTQ stuff
 
 def gathererCapitalise(y):
@@ -675,7 +675,7 @@ if __name__ == '__main__':
         ret += "<card name> - gives what's on the card\n"
         ret += "<card name> extend - gives extended info about the card (everything - rulings, legality, artist, flavour text, foreign names)\n"
         ret += "<card name>* - search card names\n"
-        ret += "r <text> - search the comprehensive rules for text (allows for regexps)\n"
+        ret += "r <text> - search the comprehensive rules for text\n"
         ret += "s <text> - advanced search for cards with particular characteristics.  Type helpsearch for info\n"
         ret += "qs <text> - same as above but only give card names\n"
         ret += "random - gives a random card\n"
@@ -687,6 +687,7 @@ if __name__ == '__main__':
         #ret += "\tbooster <set> - gives a randomly generated booster from either set code, or set name\n"
         #ret += "\tqbooster <set> - gives a randomly generated booster from either set code, or set name, short names\n"
         ret += "help - prints this help\n"
+        ret += "Any bugs, questions, or suggestions - ask Fry!\n"
         message.reply(ret)
 
     def url(document, message):
@@ -810,6 +811,7 @@ if __name__ == '__main__':
     @listen_to('^!(.*)')
     @respond_to('(.*)')
     def handle_message(message, card_name):
+        global bot
         if(card_name == "" or card_name == "\n"):
             return
         user_pm_channel = None
@@ -819,14 +821,31 @@ if __name__ == '__main__':
                 user_pm_channel = channel_id
         if user_pm_channel == None:
             print "Oh oh, no PM Channel"
-            print message
+            payload = { 'token': bot._client.token,
+                        'channel': message.body['user'],
+                        'text': 'Initiating comms...',
+                        'username' : 'judgebot',
+                        'as_user' : 'true',
+                    }
+            r = requests.get('https://slack.com/api/chat.postMessage', params=payload)
+            print r.text
+            try:
+                rj = r.json()
+                user_pm_channel = rj['channel']
+            except:
+                print "Error parsing json"
+                print sys.exc_info()
         channel_message = False
         print card_name
         if message.body['text'].startswith("!"):
             if user_pm_channel != message.body.get("channel", ""):
                 #print "Channel Message!"
                 if(message.body['text'].endswith(' extend') or ('printsets' in message.body['text']) or ('help' in message.body['text'])):
-                    message.body['channel'] = user_pm_channel
+                    if user_pm_channel:
+                        message.body['channel'] = user_pm_channel
+                    else:
+                        print ":("
+                        channel_message = True
                 else:
                     channel_message = True
             else:
@@ -952,8 +971,11 @@ if __name__ == '__main__':
                         message.reply("Too many cards to print! ({} > 10). Please narrow search".format(len(cards)))
                         return
                     else:
-                        message.reply("Too many cards for channel, PM'ed results")
-                        message.body['channel'] = user_pm_channel
+                        message.reply("Too many cards for channel, trying to PM results")
+                        if user_pm_channel:
+                            message.body['channel'] = user_pm_channel
+                        else:
+                            message.reply("Something went wrong PMing, tell Fry")
                 else:
                     message_out = message_out.replace('\n', ' ')
             message.reply(message_out)
