@@ -808,40 +808,54 @@ if __name__ == '__main__':
 # u'latest': {u'text': u'!Island', u'type': u'message', u'user': u'U1X8R7KNH', u'ts': u'1470811285.000053'},
 # u'id': u'G1ZSW8GL8', u'has_pins': False}
 
+# TODO: Cache judge PM channel?
+
+    def find_pm_channel(message):
+        global bot
+        user_pm_channel = None
+        payload = { 'token': bot._client.token,
+                    'channel': message.body['user'],
+                    'text': 'Initiating comms...',
+                    'username' : 'judgebot',
+                    'as_user' : 'true',
+                }
+        r = requests.get('https://slack.com/api/chat.postMessage', params=payload)
+        print r.text
+        try:
+            rj = r.json()
+            user_pm_channel = rj['channel']
+        except:
+            print "Error parsing json"
+            print sys.exc_info()
+        return user_pm_channel
+
     @listen_to('^!(.*)')
     @respond_to('(.*)')
     def handle_message(message, card_name):
-        global bot
         if(card_name == "" or card_name == "\n"):
             return
+        print "Processing message: " + card_name
+        print "MBU: " + message.body['user']
+        print "Incoming Chan: " + message.channel._body.get('name', "")
+        print "Incoming Chan is PM: " + str(message.channel._body.get('name', "") == "")
         user_pm_channel = None
+        print "Attempting to find preliminary PM channel"
         for channel_id, channel in iteritems(message._client.channels):
             if channel.get('user', "") == message.body['user']:
-                #print "Found PM Channel!"
+                print "Found PM channel"
                 user_pm_channel = channel_id
-        if user_pm_channel == None:
-            print "Oh oh, no PM Channel"
-            payload = { 'token': bot._client.token,
-                        'channel': message.body['user'],
-                        'text': 'Initiating comms...',
-                        'username' : 'judgebot',
-                        'as_user' : 'true',
-                    }
-            r = requests.get('https://slack.com/api/chat.postMessage', params=payload)
-            print r.text
-            try:
-                rj = r.json()
-                user_pm_channel = rj['channel']
-            except:
-                print "Error parsing json"
-                print sys.exc_info()
+                break
         channel_message = False
-        print card_name
         if message.body['text'].startswith("!"):
             if user_pm_channel != message.body.get("channel", ""):
-                #print "Channel Message!"
+                print "Channel Message starting with !"
                 if(message.body['text'].endswith(' extend') or ('printsets' in message.body['text']) or ('help' in message.body['text'])):
+                    print "Choosing to PM reply"
+                    if not user_pm_channel:
+                        print "Didn't get the prelim, doing the full thing"
+                        user_pm_channel = find_pm_channel(message)
                     if user_pm_channel:
+                        print "Found the thing"
                         message.body['channel'] = user_pm_channel
                     else:
                         print ":("
@@ -849,6 +863,7 @@ if __name__ == '__main__':
                 else:
                     channel_message = True
             else:
+                print "Private Message starting with !"
                 card_name = card_name[1:]
             if(rule_regexp.match(card_name)):
                 card_name = "r " + card_name
