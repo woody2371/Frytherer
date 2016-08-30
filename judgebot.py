@@ -1,6 +1,6 @@
 #!/usr/bin/python2.7
 # -*- coding: utf-8 -*-
-import json, re, rlcompleter, random, sys
+import json, re, rlcompleter, random, sys, difflib
 from pyparsing import *
 import signal, ast, string
 from itertools import product
@@ -52,6 +52,7 @@ def dedupe(seq, idfun=None):
 mana_regexp = re.compile('([0-9]*)(b*)(g*)(r*)(u*)(w*)')
 rule_regexp = re.compile('(?:\d)+\.(?:.*)')
 section_regexp = re.compile('(aipg|amtr) (?:(appendix [a-f])|(\d)(?:(?:\.)(\d)){0,1})')
+bot_attention_regex = re.compile('(?:!(\S*))+')
 
 # Calculate the possible mana permutations of cards
 # Used for hybrid cards when comparing mana costs)
@@ -808,14 +809,12 @@ if __name__ == '__main__':
 # u'latest': {u'text': u'!Island', u'type': u'message', u'user': u'U1X8R7KNH', u'ts': u'1470811285.000053'},
 # u'id': u'G1ZSW8GL8', u'has_pins': False}
 
-# TODO: Cache judge PM channel?
-
-    def find_pm_channel(message):
+    def find_pm_channel(message, text="Initiating comms..."):
         global bot
         user_pm_channel = None
         payload = { 'token': bot._client.token,
                     'channel': message.body['user'],
-                    'text': 'Initiating comms...',
+                    'text': text,
                     'username' : 'judgebot',
                     'as_user' : 'true',
                 }
@@ -829,15 +828,21 @@ if __name__ == '__main__':
             print sys.exc_info()
         return user_pm_channel
 
-    @listen_to('^!(.*)')
+    @listen_to('!(\S*)')
     @respond_to('(.*)')
     def handle_message(message, card_name):
         if(card_name == "" or card_name == "\n"):
             return
-        print "Processing message: " + card_name
+        print "Raw message: " + message.body['text']
+        command_list = bot_attention_regex.findall(message.body['text'])
+        if command_list == []:
+            command_list = [card_name]
+        if message.body['text'].startswith("!"):
+            command_list.append(message.body['text'])
+        print "Found the following commands: " + str(command_list)
         print "MBU: " + message.body['user']
         print "Incoming Chan: " + message.channel._body.get('name', "")
-        print "Incoming Chan is PM: " + str(message.channel._body.get('name', "") == "")
+        channel_message = (message.channel._body.get('name', "") != "")
         user_pm_channel = None
         print "Attempting to find preliminary PM channel"
         for channel_id, channel in iteritems(message._client.channels):
@@ -845,155 +850,159 @@ if __name__ == '__main__':
                 print "Found PM channel"
                 user_pm_channel = channel_id
                 break
-        channel_message = False
-        if message.body['text'].startswith("!"):
-            if user_pm_channel != message.body.get("channel", ""):
-                print "Channel Message starting with !"
-                if(message.body['text'].endswith(' extend') or ('printsets' in message.body['text']) or ('help' in message.body['text'])):
-                    print "Choosing to PM reply"
-                    if not user_pm_channel:
-                        print "Didn't get the prelim, doing the full thing"
-                        user_pm_channel = find_pm_channel(message)
-                    if user_pm_channel:
-                        print "Found the thing"
-                        message.body['channel'] = user_pm_channel
-                    else:
-                        print ":("
-                        channel_message = True
-                else:
-                    channel_message = True
-            else:
-                print "Private Message starting with !"
-                card_name = card_name[1:]
-            if(rule_regexp.match(card_name)):
-                card_name = "r " + card_name
-        cards = []
-        y = []
-
-        # Display extended information about a card
-        extend = False
-        # Search card text instead of name
-        text = False
-        # Do a regular expression search of the card name
-        match = False
-        # Search terms instead of name
-        search = False
-        # Print full matches
-        quick = False
-
-        if card_name.startswith("t "):
-            text = True
-            card_name = card_name[2:]
-        #elif ("pptq-add" in card_name) or ("my pptq had" in card_name) or ("ran a pptq" in card_name):
-        elif card_name.endswith("extend"):
-            extend = True
-            card_name = card_name[:-6].rstrip()
-        elif card_name.endswith("*"):
-            match = True
-            card_name = card_name[:-1]
-        elif card_name.startswith("s ") or card_name.startswith("qs "):
-            search = True
-            if card_name.startswith("qs "):
-                quick = True
-                card_name = card_name[3:].lower()
-            else:
-                card_name = card_name[2:].lower()
-            #output = ""
-            output = []
-            try:
-                parsed_data = super_total.parseString(card_name)
-            except (ParseException, ParseFatalException) as e:
-                message.reply("Unable to parse search terms\n%s" % e)
-                return
-
-            last_was_s = False
-            for idx, x in enumerate(parsed_data.asList()):
-                if x in ["and", "or", "not"]:
-                    output.append(x)
-                    last_was_s = False
-                elif x == "(":
-                    if last_was_s:
-                      output.append("AND")
-                    output.append("(")
-                    last_was_s = False
-                elif x == ")":
-                    output.append(")")
-                    last_was_s = False
-                else:
-                    if last_was_s:
-                        output.append("AND")
-                    output.append(x)
-                    last_was_s = True
-
-            cards = new_filter_function(output)
-        elif card_name == "random":
-            # Pick a random card from all the cards
-            card_name = random.choice(allCardNames)
-        elif card_name.startswith("r "):
-            if rules == []:
-              message.reply("Rules search not available")
-              return
-            card_name = card_name[2:]
-            if card_name in all_rules:
-                message.reply(card_name + ": " + all_rules[card_name])
-            else:
-                rules_list = [(x, y) for (x, y) in all_rules.items() if re.search(card_name, y,  re.I)]
-                for (rule_no, rule) in sorted(rules_list):
-                    message.reply(str(rule_no) + ": " + rule)
-            pass
-        elif card_name == "printsets":
-            # Print out the name of all the sets we know about
-            c.execute('SELECT DISTINCT(name), code FROM sets ORDER BY name ASC')
-            message_out = ""
-            for name, code in [(x[0], x[1]) for x in c.fetchall()]:
-                message_out += name + " (" + code + ")" + "\n"
-            message.reply(message_out)
-            return
-        elif card_name == "printsetsinorder":
-            c.execute('SELECT DISTINCT(name), code, releaseDate FROM sets ORDER BY releaseDate ASC')
-            message_out = ""
-            for name, code, date in [(x[0], x[1], x[2]) for x in c.fetchall()]:
-                message_out += name + " (" + code + ")" + " [" + date + "]" + "\n"
-            message.reply(message_out)
-            return
-        elif card_name == "help":
-            help(message)
-            pass
-        elif card_name == "helpsearch":
-            helpsearch(message)
-            pass
-        elif card_name.startswith("url "):
-            card_name = card_name[4:]
-            url(card_name.lower(), message)
-            pass
-
-        if text:
-            cards = c.execute('SELECT * FROM cards WHERE text LIKE ? GROUP BY name', ('%' + card_name + '%',)).fetchall()
-        elif match:
-            cards = c.execute('SELECT * FROM cards WHERE name LIKE ? GROUP BY name', ('%' + card_name + '%',)).fetchall()
-        elif not search:
-            cards = c.execute('SELECT * FROM cards WHERE name = ? OR name = ? LIMIT 1', (card_name.strip(), gathererCapitalise(card_name.strip()),)).fetchall()
-
-        if cards != []:
-            message_out = ""
-            for card in cards:
-                message_out += printCard(card, quick=quick, extend=(2 if extend else 0), slackChannel=True) + '\n'
-            if not channel_message:
-                message_out += '\n' + str(len(cards)) + " result/s"
-            else:
-                if (len(cards) > 1 and not quick) or (len(cards) > 4 and quick):
-                    if len(cards) > 10 and not quick:
-                        message.reply("Too many cards to print! ({} > 10). Please narrow search".format(len(cards)))
-                        return
-                    else:
-                        message.reply("Too many cards for channel, trying to PM results")
+        for card in command_list:
+            card_name = card
+            if card.startswith("!"):
+                if user_pm_channel != message.body.get("channel", ""):
+                    print "Channel Message starting with !"
+                    if(card.endswith(' extend') or ('printsets' in card) or ('help' in card)):
+                        print "Choosing to PM reply"
+                        if not user_pm_channel:
+                            print "Didn't get the prelim, doing the full thing"
+                            user_pm_channel = find_pm_channel(message)
                         if user_pm_channel:
+                            print "Found the thing"
                             message.body['channel'] = user_pm_channel
                         else:
-                            message.reply("Something went wrong PMing, tell Fry")
+                            print ":("
+                            channel_message = True
+                    else:
+                        channel_message = True
                 else:
-                    message_out = message_out.replace('\n', ' ')
-            message.reply(message_out)
+                    print "Private Message starting with !"
+                    card_name = card[1:]
+                if(rule_regexp.match(card_name)):
+                    card_name = "r " + card
+            cards = []
+            y = []
+
+            # Display extended information about a card
+            extend = False
+            # Search card text instead of name
+            text = False
+            # Do a regular expression search of the card name
+            match = False
+            # Search terms instead of name
+            search = False
+            # Print full matches
+            quick = False
+
+            if card_name.startswith("t "):
+                text = True
+                card_name = card_name[2:]
+            #elif ("pptq-add" in card_name) or ("my pptq had" in card_name) or ("ran a pptq" in card_name):
+            elif card_name.endswith("extend"):
+                extend = True
+                card_name = card_name[:-6].rstrip()
+            elif card_name.endswith("*"):
+                match = True
+                card_name = card_name[:-1]
+            elif card_name.startswith("s ") or card_name.startswith("qs "):
+                search = True
+                if card_name.startswith("qs "):
+                    quick = True
+                    card_name = card_name[3:].lower()
+                else:
+                    card_name = card_name[2:].lower()
+                #output = ""
+                output = []
+                try:
+                    parsed_data = super_total.parseString(card_name)
+                except (ParseException, ParseFatalException) as e:
+                    message.reply("Unable to parse search terms\n%s" % e)
+                    return
+
+                last_was_s = False
+                for idx, x in enumerate(parsed_data.asList()):
+                    if x in ["and", "or", "not"]:
+                        output.append(x)
+                        last_was_s = False
+                    elif x == "(":
+                        if last_was_s:
+                          output.append("AND")
+                        output.append("(")
+                        last_was_s = False
+                    elif x == ")":
+                        output.append(")")
+                        last_was_s = False
+                    else:
+                        if last_was_s:
+                            output.append("AND")
+                        output.append(x)
+                        last_was_s = True
+
+                cards = new_filter_function(output)
+            elif card_name == "random":
+                # Pick a random card from all the cards
+                card_name = random.choice(allCardNames)
+            elif card_name.startswith("r "):
+                if rules == []:
+                  message.reply("Rules search not available")
+                  return
+                card_name = card_name[2:]
+                if card_name in all_rules:
+                    message.reply(card_name + ": " + all_rules[card_name])
+                else:
+                    rules_list = [(x, y) for (x, y) in all_rules.items() if re.search(card_name, y,  re.I)]
+                    for (rule_no, rule) in sorted(rules_list):
+                        message.reply(str(rule_no) + ": " + rule)
+                pass
+            elif card_name == "printsets":
+                # Print out the name of all the sets we know about
+                c.execute('SELECT DISTINCT(name), code FROM sets ORDER BY name ASC')
+                message_out = ""
+                for name, code in [(x[0], x[1]) for x in c.fetchall()]:
+                    message_out += name + " (" + code + ")" + "\n"
+                message.reply(message_out)
+                return
+            elif card_name == "printsetsinorder":
+                c.execute('SELECT DISTINCT(name), code, releaseDate FROM sets ORDER BY releaseDate ASC')
+                message_out = ""
+                for name, code, date in [(x[0], x[1], x[2]) for x in c.fetchall()]:
+                    message_out += name + " (" + code + ")" + " [" + date + "]" + "\n"
+                message.reply(message_out)
+                return
+            elif card_name == "help":
+                help(message)
+                pass
+            elif card_name == "helpsearch":
+                helpsearch(message)
+                pass
+            elif card_name.startswith("url "):
+                card_name = card_name[4:]
+                url(card_name.lower(), message)
+                pass
+
+            if text:
+                cards = c.execute('SELECT * FROM cards WHERE text LIKE ? GROUP BY name', ('%' + card_name + '%',)).fetchall()
+            elif match:
+                cards = c.execute('SELECT * FROM cards WHERE name LIKE ? GROUP BY name', ('%' + card_name + '%',)).fetchall()
+            elif not search:
+                test_list = ([x for x in allCardNames if difflib.SequenceMatcher(None, x.split(", ")[0].lower(), card_name.lower()).ratio() > 0.8])
+                if test_list == []:
+                    test_list = ([x for x in allCardNames if difflib.SequenceMatcher(None, x.lower(), card_name.lower()).ratio() > 0.8])
+                cards = c.execute('SELECT * FROM cards WHERE name = ? OR name = ? OR name IN (?) LIMIT 1', (card_name.strip(), gathererCapitalise(card_name.strip()), ",".join(test_list),)).fetchall()
+
+            if cards != []:
+                message_out = ""
+                for card in cards:
+                    message_out += printCard(card, quick=quick, extend=(2 if extend else 0), slackChannel=True) + '\n'
+                if not channel_message:
+                    message_out += '\n' + str(len(cards)) + " result/s"
+                else:
+                    if (len(cards) > 1 and not quick) or (len(cards) > 4 and quick):
+                        if len(cards) > 10 and not quick:
+                            message.reply("Too many cards to print! ({} > 10). Please narrow search".format(len(cards)))
+                            return
+                        else:
+                            message.reply("Too many cards for channel, trying to PM results")
+                            if user_pm_channel:
+                                message.body['channel'] = user_pm_channel
+                            else:
+                                message.reply("Something went wrong PMing, tell Fry")
+                    else:
+                        message_out = message_out.replace('\n', ' ')
+                message.reply(message_out)
 
     reload(sys)  # Reload does the trick!
     sys.setdefaultencoding('UTF8')
