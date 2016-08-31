@@ -176,6 +176,8 @@ def cardSearch(cursor, terms):
                     do_later.append(term)
             elif term.startswith("n:"):
                 sql_query += "name LIKE '%" + term[2:].replace('"', '') + "%'"
+            elif term.startswith("en:"):
+                sql_query += "name LIKE '" + term[3:].replace('"', '') + "'"
             elif term.startswith("t:"):
                 sql_query += "type LIKE '%" + term[2:].replace('"', '') + "%'"
             elif term.startswith("r:"):
