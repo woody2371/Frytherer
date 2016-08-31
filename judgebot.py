@@ -250,6 +250,7 @@ if __name__ == '__main__':
             # Handle Blah !card1 blah !card2
             # Don't forget if it's a PM we'll have stripped the possible initial ! so let's
             # use the raw message
+            # TODO: Do it backwards, so longest matches are better
             command_list = bot_command_regex.findall(raw_message)
             logging.debug("Command list: {}".format(command_list))
             cards_found = []
@@ -326,7 +327,7 @@ if __name__ == '__main__':
                 return channel_id
         return None
 
-    @listen_to('!(\S*)')
+    @listen_to('!(\S+)')
     def handle_public_message(message, message_text):
         """Listen to the channels, respond to something that looks like a command."""
         logging.debug("Received a public command.  Raw text: %s" % message.body['text'])
