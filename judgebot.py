@@ -38,7 +38,11 @@ def messagekey(message, *args, **kwargs):
 
 # TODO: PPTQ Stuff
 # Legalities in card output
-# Rulings
+# Rulings & flavour & reminder etc
+# Better fuzzy matching
+# Test suite (for regressions)
+# Match all our commands inside a message D:
+# Don't retrieve a billion cards only to tell the user that it's too many to show. Do a COUNT() first
 
 
 def intersperse(delimiter, seq):
@@ -50,7 +54,7 @@ def intersperse(delimiter, seq):
     """
     return islice(chain.from_iterable(izip(repeat(delimiter), seq)), 1, None)
 
-rule_regexp = re.compile('(?:\d)+\.(?:.*)')
+rule_regexp = re.compile('!{0,1}(?:\d)+\.(?:.*)')
 bot_command_regex = re.compile('!([^!|&]+)')
 
 
@@ -139,7 +143,7 @@ if __name__ == '__main__':
         If they give us "<string> extend", assume that it's "<cardname extend>".
         If they give us "<string>*", assume that it's "<cardname*>"
         """
-        logging.debug("Dispatching message: %s" % message)
+        logging.debug("Dispatching message: {} (Raw text {})".format(message, raw_message))
         if message == "help":
             return (help(), True)
         elif message == "helpsearch":
@@ -181,14 +185,14 @@ if __name__ == '__main__':
                     return [("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=True, slackChannel=channel) for card in cards]), True)]
             else:
                 return ("\n".join([printCard(c, card, quick=False, slackChannel=channel) for card in cards] + ["{} result/s".format(len(cards))]), False)
-        elif message.startswith("s ") or message.startswith("qs "):
+        elif raw_message.startswith("!s ") or raw_message.startswith("!qs "):
             logging.debug("Advanced Search!")
             quick = False
-            if message.startswith("qs "):
+            if message == "qs":
                 quick = True
-                card_name = message[3:].lower()
+                card_name = raw_message[4:].lower()
             else:
-                card_name = message[2:].lower()
+                card_name = raw_message[3:].lower()
             output = []
             try:
                 parsed_data = super_total.parseString(card_name)
@@ -233,10 +237,10 @@ if __name__ == '__main__':
                     return [("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=True, slackChannel=channel) for card in cards]), True)]
             else:
                 return ("\n".join([printCard(c, card, quick=quick, slackChannel=channel) for card in cards] + ["{} result/s".format(len(cards))]), False)
-        elif message.startswith("r ") or rule_regexp.match(message):
+        elif raw_message.startswith("!r ") or rule_regexp.match(raw_message):
             logging.debug("Rules query!")
-            if message.startswith("r "):
-                message = message[2:]
+            if message == "r":
+                message = raw_message[3:]
             return (ruleSearch(all_rules, message), False)
         else:
             logging.debug("Trying to figure out card name")
@@ -290,7 +294,8 @@ if __name__ == '__main__':
                 else:
                     return [("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=False, slackChannel=channel) for card in cards]), True)]
             else:
-                return ("I didn't understand your command", False)
+                logging.debug("I didn't understand the command")
+                return ("", False)
 
     def send_user_pm(user, text="Initiating comms..."):
         """Send the specified user the specified message privately.
@@ -330,7 +335,11 @@ if __name__ == '__main__':
     @listen_to('!(\S+)')
     def handle_public_message(message, message_text):
         """Listen to the channels, respond to something that looks like a command."""
-        logging.debug("Received a public command.  Raw text: %s" % message.body['text'])
+        logging.debug("Received a public command.  Raw text: %s" % (message.body['text']))
+        try:
+            logging.debug("The channel name is #{}".format(message.channel._body['name']))
+        except KeyError:
+            logging.debug("Private channel ID {}".format(message.body['channel']))
         logging.debug("The regexp gives me {}".format(message_text))
         if message_text.startswith("!"):
             logging.debug("Stripping leading !")
@@ -340,6 +349,8 @@ if __name__ == '__main__':
         if type(replies) is not list:
             replies = [replies]
         for reply in replies:
+            if not reply[0]:
+                continue
             if reply[1]:
                 # Force a PM
                 user_pm_channel = None
@@ -360,7 +371,7 @@ if __name__ == '__main__':
     @respond_to('(.*)')
     def handle_private_message(message, message_text):
         """Receive a private message from the user and figure out how to respond."""
-        logging.debug("Received private message.  Raw text: %s" % message.body['text'])
+        logging.debug("Received private message from %s.  Raw text: %s" % (message._client.users[message.body['user']]['real_name'], message.body['text']))
         if message_text.startswith("!"):
             logging.debug("Stripping leading !")
             message_text = message_text[1:]
@@ -369,7 +380,8 @@ if __name__ == '__main__':
         if type(replies) is not list:
             replies = [replies]
         for reply in replies:
-            message.reply(reply[0])
+            if reply[0]:
+                message.reply(reply[0])
 
     reload(sys)  # Reload does the trick!
     sys.setdefaultencoding('UTF8')
