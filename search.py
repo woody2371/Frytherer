@@ -127,13 +127,13 @@ def new_filter_function(terms):
                             print "Invalid P/T inequality"
                     else:
                         if term[4] == "*":
-                            print "Invalid P/T inequality"   
+                            print "Invalid P/T inequality"
                     sql_query += "abs(power)" + term[3:].replace("pow", "abs(power)").replace("tou", "abs(toughness)").replace("cmc", "abs(cmc)")
                 else:
                     sql_query += "power" + term[3:].replace("pow", "power").replace("tou", "toughness").replace(":", "=")
             elif term.startswith("tou"):
                 sql_query += "toughness" + term[3:].replace("pow", "power").replace("tou", "toughness").replace("cmc", "abs(cmc)").replace(":", "=")
-                
+
             elif term.startswith("cmc"):
                 sql_query += term.replace("pow", "power").replace("tou", "toughness").replace(":", "=")
             elif term.startswith("mana"):
@@ -387,7 +387,7 @@ if __name__ == '__main__':
                     squished_rules_text = re.sub('(pow|tou|CMC) (\d+) or greater', '\g<1> >= \g<2>', squished_rules_text)
                     if "Creature" in Types:
                         squished_rules_text += " - " + card["power"] + "/" + card["toughness"]
-                    
+
                     if ret:
                         return card["name"] + " (" + card["manaCost"] + ")" + "- " + " - ".join([squished_rules_text.replace(". . ", ". ").replace("..", ".").replace("-  - ", " - ").replace("  ", " ")])
                     print "- " + " - ".join([squished_rules_text.replace(". . ", ". ").replace("..", ".").replace("-  - ", " - ").replace("  ", " ")])
@@ -411,13 +411,13 @@ if __name__ == '__main__':
             print card["text"].encode('utf-8')
         if extend:
             print "\n----------"
-            sources = c.execute('SELECT "set", source, rarity, starter, artist, flavor FROM cards WHERE name = ?', (card["name"],)).fetchall()
+            sources = c.execute('SELECT "set", source, rarity, starter, artist, flavor, number FROM cards WHERE name = ?', (card["name"],)).fetchall()
             for p in Printings:
                 #print p
                 setcode = c.execute('SELECT name FROM sets WHERE code = ?', (p,)).fetchone()
                 #print setcode
                 source = next(x for x in sources if x[0] == p)
-                print setcode[0] + " (" + source[2] + ((") (" + source[1] + ")") if source[1] else ")") + (" (Starter Pack)" if source[3] else "") + " [" + source[4] + "]"
+                print setcode[0] + " (" + source[2] + ")" + ((" (" + source[6] + ")") if source[6] else "") + ((" (" + source[1] + ")") if source[1] else "") + (" (Starter Pack)" if source[3] else "") + " [" + source[4] + "]"
                 if source[5]:
                     print source[5]
             print "\n----------"
@@ -557,7 +557,7 @@ if __name__ == '__main__':
                     INSERT INTO cards VALUES (
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                     )""", (card['name'].replace(u"Æ", "Ae").replace(u"á", "a").encode('utf-8'), str(card.get('names', [])), str(card.get('printings', [])), s['code'].encode('utf-8'), card.get('layout', '').encode('utf-8'), card['artist'].encode('utf-8'), card.get('multiverseid', 0), str(card.get('foreignNames', [])), card.get('cmc', 0), card.get('number', '').encode('utf-8'), card['rarity'].encode('utf-8'), str(card.get('colors', [])), card['imageName'].encode('utf-8'), card.get('text', '').encode('utf-8'), card.get('originalText', '').encode('utf-8'), card.get('manaCost', '').encode('utf-8'), card['type'].encode('utf-8'), card.get('originalType', '').encode('utf-8'), card.get('flavor', '').encode('utf-8'), str(card.get('types', [])), str(card.get('subtypes', [])), str(card.get('supertypes', [])), str(card.get('legalities', [])), card.get('power', '').encode('utf-8'), card.get('toughness', '').encode('utf-8'), card.get('watermark', '').encode('utf-8'), str(card.get('rulings', [])), card.get('loyalty', 0), card.get('source', '').encode('utf-8'), str(card.get('starter', '')).encode('utf-8')))
-        
+
         c.execute('CREATE INDEX cardindex ON cards (name)')
         c.execute('CREATE INDEX cardsetindex ON cards (\"set\")')
         c.execute('CREATE INDEX cardrarityindex ON cards (rarity)')
@@ -578,7 +578,7 @@ if __name__ == '__main__':
             newcube_cards = cube_file.readlines()
     except IOError:
         print "Unable to import 2015 Cube list"
-        newcube_cards = []        
+        newcube_cards = []
 
     try:
         with open('legendarycube.txt') as cube_file:
@@ -806,7 +806,7 @@ if __name__ == '__main__':
             if set_name not in allSets.keys():
                 setname = next((code for code, name in allSets.items() if name.lower() == set_name.lower()), None)
                 if setname != None:
-                    set_name = setname                
+                    set_name = setname
             try:
                 i = 0
                 cardlist = c.execute('SELECT * FROM cards WHERE upper("set") = ? GROUP BY name', (set_name,))
@@ -1001,7 +1001,7 @@ if __name__ == '__main__':
                             extra = random.choice(population)
                             if numboosters > 1:
                                 sealedpool.append(extra + "Power 9! : " + card["name"] + " (" + card["manaCost"] + ")")
-                            else:                            
+                            else:
                                 print extra + "Power 9! : " + card["name"] + " (" + card["manaCost"] + ")"
                             continue
                         elif rarity.startswith("foil") and (set_name == "mma" or set_name == "mm2"):

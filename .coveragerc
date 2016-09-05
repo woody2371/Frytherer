@@ -1,0 +1,9 @@
+[run]
+branch = True
+omit =
+        __init__.py
+        search.py
+        dbimport.py
+        slackbot_settings.py
+        testsuite.py
+        test_diff.py

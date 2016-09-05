@@ -14,7 +14,7 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 mana_regexp = re.compile('([0-9]*)(b*)(g*)(r*)(u*)(w*)')
-section_regexp = re.compile('(aipg|amtr) (?:(appendix [a-f])|(\d)(?:(?:\.)(\d)){0,1})')
+section_regexp = re.compile('(aipg|amtr) (?:(appendix [a-f])|(\d+)(?:(?:\.)(\d)){0,1})')
 
 
 def gathererCapitalise(y):
@@ -50,7 +50,7 @@ def dedupe(seq, idfun=None):
     for item in seq:
         try:
             marker = idfun(item)
-        except AttributeError:
+        except AttributeError:  # pragma: no cover
             print item
         # in old Python versions:
         # if seen.has_key(marker)
@@ -85,14 +85,7 @@ def calculateManaPerms(manaCost):
     else:
         for x in product(*manacost_permutes):
             v = "".join(manacost_statics) + "".join(x)
-            s = -1
-            ret = ""
-            for i in v:
-                try:
-                    s += int(i)
-                except ValueError:
-                    ret += i
-            totalmanaoptions.append(ret + (str(s) if s != -1 else ""))
+            totalmanaoptions.append(''.join(sorted(v)))
 
     return dedupe(totalmanaoptions)
 
@@ -117,15 +110,16 @@ def calculateCMC(manaCost):
                         cmc += int(input_array[idx])
                     else:
                         cmc += len(input_array[idx])
-    except:
-        print "Some type of error calculating CMC. Tell Fry"
-        print sys.exc_info()
+    except:  # pragma: no cover
+        logging.error("Some type of error calculating CMC. Tell Fry")
+        logging.error(sys.exc_info())
     return cmc
 
 
 def cardSearch(cursor, terms):
     """Search the database for cards.
 
+    TODO: Parameterise the rest of this
     INPUT: Terms to search for, and the database cursor
     OUTPT: Card objects (if found)
     """
@@ -345,11 +339,11 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
                 squished_rules_text = ""
                 # Do some MODO-like compression of rules text to get it to fit
                 if not ret:
-                    squished_rules_text += prepend + card["name"],
+                    squished_rules_text += prepend + card["name"]
                     if "/" in card["manaCost"]:
-                        squished_rules_text += "(" + card["manaCost"] + ")",
+                        squished_rules_text += "(" + card["manaCost"] + ")"
                     else:
-                        squished_rules_text += "(" + card["manaCost"].replace("{", "").replace("}", "") + ")",
+                        squished_rules_text += "(" + card["manaCost"].replace("{", "").replace("}", "") + ")"
                 squished_rules_text += " ".join([x[0] for x in types])
                 squished_rules_text += " - " + card["text"].replace("\n", ". ").replace(card["name"], "~").replace("{", "").replace("}", "")
                 squished_rules_text = re.sub('\(.*?\)', '', squished_rules_text)
@@ -385,7 +379,7 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
                 if ret:
                     return card["name"] + " (" + card["manaCost"] + ")" + "- " + " - ".join([squished_rules_text.replace(". . ", ". ").replace("..", ".").replace("-  - ", " - ").replace("  ", " ")])
                 return "- " + " - ".join([squished_rules_text.replace(". . ", ". ").replace("..", ".").replace("-  - ", " - ").replace("  ", " ")])
-        except AttributeError:
+        except AttributeError:  # pragma: no cover
             logging.error("Error when printing card")
             logging.error(card)
             logging.error(sys.exc_info())
@@ -412,11 +406,11 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
             message_out += card["text"].encode('utf-8') + '\n'
     if extend:
         message_out += "----------" + '\n'
-        sources = cursor.execute('SELECT "set", source, rarity, starter, artist, flavor FROM cards WHERE name = ?', (card["name"],)).fetchall()
+        sources = cursor.execute('SELECT "set", source, rarity, starter, artist, flavor, number FROM cards WHERE name = ?', (card["name"],)).fetchall()
         for p in printings:
             setcode = cursor.execute('SELECT name FROM sets WHERE code = ?', (p,)).fetchone()
             source = next(x for x in sources if x[0] == p)
-            message_out += setcode[0] + " (" + source[2] + ((") (" + source[1] + ")") if source[1] else ")") + (" (Starter Pack)" if source[3] else "") + " [" + source[4] + "]" + '\n'
+            message_out += setcode[0] + " (" + source[2] + ")" + ((" (" + source[6] + ")") if source[6] else "") + ((" (" + source[1] + ")") if source[1] else "") + (" (Starter Pack)" if source[3] else "") + " [" + source[4] + "]" + '\n'
             if source[5]:
                 message_out += source[5] + '\n'
         message_out += "----------" + '\n'
@@ -488,10 +482,9 @@ def help():
     return ret
 
 
-def helpsearch(message):
+def helpsearch():
     """Print out advanced search help message."""
-    return """
-        All these options can be combined to more complicated queries: "a or b", "a not b", "a (b or c)", "a or (b c)", and so on.
+    return """All these options can be combined to more complicated queries: "a or b", "a not b", "a (b or c)", "a or (b c)", and so on.
         Options prepended with '#' are not yet implemented
 
         Name:
@@ -685,7 +678,7 @@ def url(document):
                     ret = "Invalid section requested"
             else:
                 ret = "Something went wrong parsing your request"
-        except:
+        except:  # pragma: no cover
             logging.debug(sys.exc_info())
             ret = "Something went wrong parsing your request"
     else:
