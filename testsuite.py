@@ -1,31 +1,38 @@
 #!/usr/bin/python2.7
 # -*- coding: utf-8 -*-
-import unittest, sys, logging
+import unittest, sys, logging, time
 import pysqlite2.dbapi2 as sqlite
 from judgebot import dispatch_message
 from frytherer import *
 
+try:
+    conn = sqlite.connect('frytherer.db', check_same_thread=False)
+    conn.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
+    conn.row_factory = sqlite.Row
+    c = conn.cursor()
+except sqlite.OperationalError:
+    logging.error("Unable to open database - goodbye")
+    sys.exit(0)
+with open('CR.txt') as data_file:
+    rules = data_file.readlines()
+
+all_rules = {}
+for rule in rules:
+    x = rule.split('. ')
+    all_rules[x[0]] = ". ".join(x[1:])
+
 
 class FrythererTestCases(unittest.TestCase):
     def setUp(self):
-        reload(sys)  # Reload does the trick!
-        sys.setdefaultencoding('UTF8')
-        logging.basicConfig(level=logging.DEBUG)
-        try:
-            conn = sqlite.connect('frytherer.db', check_same_thread=False)
-            conn.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
-            conn.row_factory = sqlite.Row
-            self.c = conn.cursor()
-        except sqlite.OperationalError:
-            logging.error("Unable to open database - goodbye")
-            sys.exit(0)
-        with open('CR.txt') as data_file:
-            rules = data_file.readlines()
+        global all_rules
+        global c
+        self.all_rules = all_rules
+        self.c = c
+        self.startTime = time.time()
 
-        self.all_rules = {}
-        for rule in rules:
-            x = rule.split('. ')
-            self.all_rules[x[0]] = ". ".join(x[1:])
+    def tearDown(self):
+        t = time.time() - self.startTime
+        print "%s: %.3f" % (self.id(), t)
 
     """Tests for basic functionality"""
     def testHelp(self):
@@ -49,6 +56,8 @@ class FrythererTestCases(unittest.TestCase):
         island = cardSearch(self.c, ["en:Island"])[0]
         self.assertEqual(island['name'], "Island")
         self.assertEqual(island['cmc'], 0)
+        doubleQuotedIsland = cardSearch(self.c, ["en:\"Island\""])[0]
+        self.assertEqual(doubleQuotedIsland['name'], "Island")
         only_two_basics = cardSearch(self.c, "en:Island or en:Mountain and not en:Swamp".split(' '))
         self.assertEqual(len(only_two_basics), 2)
         conspiracies = cardSearch(self.c, "banned:vintage and legal:freeform".split(' '))
@@ -57,13 +66,17 @@ class FrythererTestCases(unittest.TestCase):
         self.assertEqual(trinisphere['name'], "Trinisphere")
         biggest_power = cardSearch(self.c, "pow>15 and tou>15".split(' '))
         self.assertEqual(len(biggest_power), 1)
+        semi_biggest_power = cardSearch(self.c, "pow>=14 and tou>=14".split(' '))
+        self.assertEqual(len(semi_biggest_power), 3)
+        goggles = cardSearch(self.c, ["t:artifact", "and", 'r:"mythic rare"', "and", "f:standard", "and", "a:paick"])
+        self.assertEqual(len(goggles), 1)
 
     def testCardPrint(self):
         brisela = cardSearch(self.c, ["en:Brisela, Voice of Nightmares"])[0]
         self.assertEqual(printCard(self.c, brisela, quick=True), "Brisela, Voice of Nightmares ()")
         self.assertEqual(len(printCard(self.c, brisela, extend=2, quick=False)), 1563)
         jace = cardSearch(self.c, ["en:Jace, the Mind Sculptor"])[0]
-        self.assertEqual(printCard(self.c, jace, quick=False, slackChannel=True), "*Jace, the Mind Sculptor* {2}{U}{U} |Planeswalker - Jace| [3]  +2: Look at the top card of target player's library. You may put that card on the bottom of that player's library. / 0: Draw three cards, then put two cards from your hand on top of your library in any order. / −1: Return target creature to its owner's hand. / −12: Exile all cards from target player's library, then that player shuffles his or her hand into his or her library.")
+        self.assertEqual(printCard(self.c, jace, quick=False, slackChannel=True), u"*Jace, the Mind Sculptor* {2}{U}{U} |Planeswalker - Jace| [3]  +2: Look at the top card of target player's library. You may put that card on the bottom of that player's library. / 0: Draw three cards, then put two cards from your hand on top of your library in any order. / \u22121: Return target creature to its owner's hand. / \u221212: Exile all cards from target player's library, then that player shuffles his or her hand into his or her library.")
         tg = cardSearch(self.c, ["en:Transguild Courier"])[0]
         self.assertEqual(printCard(self.c, tg, quick=False), "Transguild Courier\n{4}\nWhite, Blue, Black, Red, Green\nArtifact Creature - Golem\n3/3\n\n")
         self.assertTrue(printCard(self.c, tg, quick=True, short=True, ret=False) != "")  # TODO: Fix this
@@ -83,6 +96,15 @@ class FrythererTestCases(unittest.TestCase):
 
 
 class BotTestCases(unittest.TestCase):
+    def setUp(self):
+        self.startTime = time.time()
+
+    def tearDown(self):
+        t = time.time() - self.startTime
+        print "%s: %.3f" % (self.id(), t)
+        # Shit should be fast
+        self.assertTrue(t < 1)
+
     """Tests for responding to commands"""
     def testHelp(self):
         self.assertTrue(dispatch_message("help", "!help", False)[0].startswith("Welcome to Frytherer"))
@@ -100,19 +122,58 @@ class BotTestCases(unittest.TestCase):
         self.assertTrue(dispatch_message("url cr", "!url cr", True)[0].startswith("http://"))
 
     def testGetCard(self):
-        pass
+        # Card that exists
+        self.assertEqual(dispatch_message("island", "!island", False)[0], "Island\n\nBasic Land - Island\n\n")
+        self.assertEqual(dispatch_message("island", "island", False)[0], "Island\n\nBasic Land - Island\n\n")
+        self.assertEqual(dispatch_message("island", "!island", True)[0], "*Island* |Basic Land - Island| ")
+        # Card that doesn't exist
+        self.assertEqual(dispatch_message("fryland", "!fryland", False)[0], "")
+        self.assertEqual(dispatch_message("fryland", "fryland", False)[0], "")
+        self.assertEqual(dispatch_message("fryland", "!fryland", True)[0], "")
+        # Weird formatting
+        # FIX: To use fast search
+        # self.assertEqual(dispatch_message("\"island\"", "!\"island\"", False)[0], "Island\n\nBasic Land - Island\n\n")
+        # FIX: To not fail
+        # self.assertEqual(dispatch_message("\"island\"", "\"island\"", False)[0], "Island\n\nBasic Land - Island\n\n")
+        # FIX: To use fast search
+        # self.assertEqual(dispatch_message("\"island\"", "!\"island\"", True)[0], "*Island* |Basic Land - Island| ")
+        # FIX: To use fast search
+        # self.assertEqual(dispatch_message("'island'", "!'island'", False)[0], "Island\n\nBasic Land - Island\n\n")
 
     def testGetCardExtend(self):
-        pass
+        self.assertTrue(len(dispatch_message("island extend", "!island extend", False)[0]) > 50)
+        self.assertTrue(len(dispatch_message("island extend", "island extend", False)[0]) > 50)
+        self.assertTrue(len(dispatch_message("island extend", "!island extend", True)[0]) > 50)
+        self.assertEqual(dispatch_message("fryland extend", "!fryland extend", False)[0], "")
+        self.assertEqual(dispatch_message("fryland extend", "fryland extend", False)[0], "")
+        self.assertEqual(dispatch_message("fryland extend", "!fryland extend", True)[0], "")
+
+    def testGetCardStar(self):
+        self.assertTrue(len(dispatch_message("island*", "!island*", False)[0]) > 50)
+        self.assertTrue(len(dispatch_message("island*", "island*", False)[0]) > 50)
+        self.assertEqual(dispatch_message("island*", "!island*", True)[0][0], "9 results sent to PM")
+        self.assertTrue(len(dispatch_message("island*", "!island*", True)[1][0]) > 50)
+        self.assertEqual(dispatch_message("fryland*", "!fryland*", False)[0], "")
+        self.assertEqual(dispatch_message("fryland*", "fryland*", False)[0], "")
+        self.assertEqual(dispatch_message("fryland*", "!fryland*", True)[0], "")
 
     def testGetRulesFromR(self):
-        pass
+        # self.assertEqual(ruleSearch(self.all_rules, "Locator"), "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
+        # self.assertEqual(ruleSearch(self.all_rules, "Fry"), "No rule/s found")
+        self.assertEqual(dispatch_message("r", "!r 100.6b", False)[0], "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
+        # self.assertEqual(dispatch_message("r", "r 100.6b", False)[0], "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
+        self.assertEqual(dispatch_message("100.6b", "100.6b", False)[0], "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
+        self.assertEqual(dispatch_message("r", "!r 100.6b", True)[0], "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
 
     def testGetRulesFromNumber(self):
         pass
 
     def testDoAdvancedSearch(self):
-        pass
+        self.assertEqual(dispatch_message("s en:\"Island\"", "!s en:\"Island\"", False)[0], "Island\n\nBasic Land - Island\n\n\n1 result/s")
+        # FIX: Recognise advanced search in PM with no !
+        # self.assertEqual(dispatch_message("s en:\"Island\"", "s en:\"Island\"", False)[0], "Island\n\nBasic Land - Island\n\n\n1 result/s")
+        self.assertEqual(dispatch_message("s en:\"Island\"", "!s en:\"Island\"", True)[0], "*Island* |Basic Land - Island| ")
+        # self.assertEqual(dispatch_message("s en:'Island'", "!s en:'Island'", False)[0], "Island\n\nBasic Land - Island\n\n\n1 result/s")
 
     def testDoAdvancedSearchQuick(self):
         pass
@@ -123,11 +184,19 @@ class BotTestCases(unittest.TestCase):
         self.assertTrue(len(dispatch_message("random", "!random", True)[0]) > 5)
 
     def testPrintSets(self):
-        pass
+        self.assertTrue(len(dispatch_message("printsets", "!printsets", False)[0]) > 5)
+        self.assertTrue(len(dispatch_message("printsets", "printsets", False)[0]) > 5)
+        self.assertTrue(len(dispatch_message("printsets", "!printsets", True)[0]) > 5)
 
     def testPrintSetsInOrder(self):
-        pass
+        self.assertTrue(len(dispatch_message("printsetsinorder", "!printsetsinorder", False)[0]) > 5)
+        self.assertTrue(len(dispatch_message("printsetsinorder", "printsetsinorder", False)[0]) > 5)
+        self.assertTrue(len(dispatch_message("printsetsinorder", "!printsetsinorder", True)[0]) > 5)
 
 
 if __name__ == '__main__':
+    reload(sys)  # Reload does the trick!
+    sys.setdefaultencoding('UTF8')
+    logging.basicConfig(level=logging.DEBUG)
+
     unittest.main()

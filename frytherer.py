@@ -123,10 +123,12 @@ def cardSearch(cursor, terms):
     INPUT: Terms to search for, and the database cursor
     OUTPT: Card objects (if found)
     """
+    params = []
     sql_query = "SELECT * FROM CARDS WHERE "
     do_later = []
     was_not = False
     for term in terms:
+        term = term.replace('"', '')
         if term.lower() in ["and", "or", "(", ")"]:
             sql_query += " " + term.upper() + " "
         if term.lower() == "not":
@@ -134,30 +136,34 @@ def cardSearch(cursor, terms):
             was_not = True
         else:
             if term.startswith("banned:"):
-                sql_query += "legalities LIKE '%u''legality'': u''Banned'', u''format'': u''" + term[7:].title() + "''%'"
+                sql_query += "legalities LIKE ?"
+                params.append("%u'legality': u'Banned', u'format': u'{}'%".format(term[7:].title()))
             elif term.startswith("legal:"):
-                sql_query += "legalities LIKE '%u''legality'': u''Legal'', u''format'': u''" + term[6:].title() + "''%'"
+                sql_query += "legalities LIKE ?"
+                params.append("%u'legality': u'Legal', u'format': u'{}'%".format(term[6:].title()))
             elif term.startswith("restricted:"):
-                sql_query += "legalities LIKE '%u''legality'': u''Restricted'', u''format'': u''" + term[11:].title() + "''%'"
+                sql_query += "legalities LIKE ?"
+                params.append("%u'legality': u'Restricted', u'format': u'{}'%".format(term[11:].title()))
             elif term.startswith("set:"):
-                sql_query += "(\"set\" = '" + term[4:] + "' OR printings LIKE '%" + term[4:].title() + "%')"
+                sql_query += "(\"set\" = ? OR printings LIKE ?)"
+                params.extend([term[4:], '%{}%'.format(term[4:].title())])
             elif term.startswith("cn:"):
-                sql_query += "number LIKE " + term[3:]
+                sql_query += "number LIKE ?"
+                params.append(term[3:])
             elif term.startswith("pow"):
                 # Need to do maths, so convert to number
                 if term[3:].startswith(">") or term[3:].startswith("<"):
                     if term[4] == "=":
                         if term[5] == "*":
-                            print "Invalid P/T inequality"
+                            logging.error("Invalid P/T inequality")
                     else:
                         if term[4] == "*":
-                            print "Invalid P/T inequality"
+                            logging.error("Invalid P/T inequality")
                     sql_query += "abs(power)" + term[3:].replace("pow", "abs(power)").replace("tou", "abs(toughness)").replace("cmc", "abs(cmc)")
                 else:
                     sql_query += "power" + term[3:].replace("pow", "power").replace("tou", "toughness").replace(":", "=")
             elif term.startswith("tou"):
                 sql_query += "toughness" + term[3:].replace("pow", "power").replace("tou", "toughness").replace("cmc", "abs(cmc)").replace(":", "=")
-
             elif term.startswith("cmc"):
                 sql_query += term.replace("pow", "power").replace("tou", "toughness").replace(":", "=")
             elif term.startswith("mana"):
@@ -169,17 +175,23 @@ def cardSearch(cursor, terms):
                     # Defer processing - can't do in SQL
                     do_later.append(term)
             elif term.startswith("n:"):
-                sql_query += "name LIKE '%" + term[2:].replace('"', '') + "%'"
+                sql_query += "name LIKE ?"
+                params.append('%{}%'.format(term[2:]))
             elif term.startswith("en:"):
-                sql_query += "name LIKE '" + term[3:].replace('"', '') + "'"
+                sql_query += "name LIKE ?"
+                params.append(term[3:])
             elif term.startswith("t:"):
-                sql_query += "type LIKE '%" + term[2:].replace('"', '') + "%'"
+                sql_query += "type LIKE ?"
+                params.append('%{}%'.format(term[2:]))
             elif term.startswith("r:"):
-                sql_query += "rarity = '" + term[2:].replace('"', "").title() + "'"
+                sql_query += "rarity = ?"
+                params.append(term[2:].title())
             elif term.startswith("f:"):
-                sql_query += "legalities LIKE '%u''legality'': u''Legal'', u''format'': u''" + term[2:].title() + "''%'"
+                sql_query += "legalities LIKE ?"
+                params.append("%u'legality': u'Legal', u'format': u'{}'%".format(term[2:].title()))
             elif term.startswith("a:"):
-                sql_query += "artist LIKE '%" + term[2:].replace('"', "") + "%' "
+                sql_query += "artist LIKE ?"
+                params.append('%{}%'.format(term[2:]))
             elif term.startswith("is:"):
                 # normal, split, flip, double-faced, token, plane, scheme, phenomenon, leveler, vanguard
                 if term[3:].lower() in ["split", "flip"]:
@@ -235,7 +247,8 @@ def cardSearch(cursor, terms):
         sql_query += "1=1"
     sql_query += " GROUP BY name"
     logging.debug(sql_query)
-    cards = cursor.execute(sql_query).fetchall()
+    logging.debug(params)
+    cards = cursor.execute(sql_query, params).fetchall()
     if len(do_later) > 0:
         return_cards = []
         for term in do_later:
@@ -401,9 +414,9 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
         if "Planeswalker" in types:
             message_out += "[" + str(card["loyalty"]) + "]" + ("  " if slackChannel else '\n')
         if slackChannel:
-            message_out += card["text"].encode('utf-8').replace('\n', ' / ')
+            message_out += card["text"].replace('\n', ' / ')
         else:
-            message_out += card["text"].encode('utf-8') + '\n'
+            message_out += card["text"] + '\n'
     if extend:
         message_out += "----------" + '\n'
         sources = cursor.execute('SELECT "set", source, rarity, starter, artist, flavor, number FROM cards WHERE name = ?', (card["name"],)).fetchall()
@@ -438,7 +451,7 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
                         foreignNames[name["language"]] = name["name"]
 
             for fPrint in foreignNames.items():
-                message_out += fPrint[0].encode("utf-8") + " : " + fPrint[1].encode("utf-8") + '\n'
+                message_out += fPrint[0] + " : " + fPrint[1] + '\n'
     return message_out
 
 

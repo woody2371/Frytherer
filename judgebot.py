@@ -7,7 +7,7 @@ Comprehensive Rules and other such useful garbage
 """
 import random, sys, difflib
 import pysqlite2.dbapi2 as sqlite
-from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, ParseException, ParseFatalException
+from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
 from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url
 from slackbot.bot import Bot
 from slackbot.bot import respond_to
@@ -36,7 +36,7 @@ try:
     conn.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
     conn.row_factory = sqlite.Row
     c = conn.cursor()
-except sqlite.OperationalError:
+except sqlite.OperationalError:  # pragma: no cover
     logging.error("Unable to open database - goodbye")
     sys.exit(0)
 
@@ -46,10 +46,24 @@ try:
     allCardNames = [y[0].lower() for y in c.fetchall()]
     numCards = len(allCardNames)
     logging.debug("Found %d cards" % numCards)
-except sqlite.OperationalError:
+except sqlite.OperationalError:  # pragma: no cover
     logging.error("No cards in DB? Try running dbimport.py")
     sys.exit(1)
 
+try:
+    logging.debug("Opening CR file")
+    with open('CR.txt') as data_file:
+        rules = data_file.readlines()
+except IOError:
+    logging.error("Unable to open Comprehensive Rules, r search will not be available")
+    rules = []
+
+terms = {}
+all_rules = {}
+for rule in rules:
+    x = rule.split('. ')
+    all_rules[x[0]] = ". ".join(x[1:])
+del rules
 
 def messagekey(message, *args, **kwargs):
     """Custom hashing function for LRU Cache."""
@@ -85,10 +99,11 @@ bot_command_regex = re.compile('!([^!|&]+)')
 
 def validate_colon_mode(s, loc, tokens):
     """Make sure colon modes are followed by a colon."""
-    if s[loc + 1] != ':':
+    # logging.debug("S: {} Loc: {} Toks: {} S[LOC]: {} S[LOC+1]: {}".format(s, loc, tokens, s[loc], s[loc+1]))
+    if s[loc + len(tokens[0])] != ':':
         raise ParseFatalException(s, loc, "Mode must be followed by a colon")
 
-colon_mode = oneOf("n o t cn in pow tou cmc r f a banned legal restricted is set").setParseAction(validate_colon_mode)
+colon_mode = oneOf("n en o t cn in pow tou cmc r f a banned legal restricted is set").setParseAction(validate_colon_mode)
 colon_or_bang_mode = "c"
 math_mode = oneOf("mana pow tou cmc")
 colon_operator = ":"
@@ -96,7 +111,7 @@ bang_operator = "!"
 math_operator = oneOf("= >= > <= < !")
 boolean_operators = oneOf("and not or")
 brackets = oneOf("( )")
-operand = (Word(alphanums) | dblQuotedString | OneOrMore(Combine(Literal("{") + Word(alphanums + "\\") + Literal("}"))))
+operand = (Word(alphanums) | dblQuotedString | sglQuotedString | OneOrMore(Combine(Literal("{") + Word(alphanums + "\\") + Literal("}"))))
 
 colon_total = colon_mode + colon_operator
 colon_or_bang_total = colon_or_bang_mode + oneOf([colon_operator, bang_operator])
@@ -138,12 +153,12 @@ def dispatch_message(message, raw_message, channel):
     elif message.endswith("extend"):
         cards = cardSearch(c, ['en:' + message[:-6].rstrip()])
         if not cards:
-            return ("Card not found", False)
+            return ("", False)
         return (printCard(c, cards[0], extend=2, quick=False), True)
     elif message.endswith("*"):
         cards = cardSearch(c, ['n:' + message[:-1]])
         if not cards:
-            return ("No cards found", False)
+            return ("", False)
         if len(cards) > 20:
             return ("Too many cards to print! ({} > 20). Please narrow search".format(len(cards)), False)
         if channel:
@@ -167,6 +182,7 @@ def dispatch_message(message, raw_message, channel):
             card_name = raw_message[4:].lower()
         else:
             card_name = raw_message[3:].lower()
+        logging.debug("Searching for {}".format(card_name))
         output = []
         try:
             parsed_data = super_total.parseString(card_name)
@@ -273,7 +289,7 @@ def dispatch_message(message, raw_message, channel):
             return ("", False)
 
 
-def send_user_pm(user, text="Initiating comms..."):
+def send_user_pm(user, text="Initiating comms..."):  # pragma: no cover
     """Send the specified user the specified message privately.
 
     Note, if the private message channel didn't already exist,
@@ -301,7 +317,7 @@ def send_user_pm(user, text="Initiating comms..."):
 
 
 @cached(cache, key=messagekey, lock=lock)
-def find_pm_channel(message):
+def find_pm_channel(message):  # pragma: no cover
     """Find a user's private message channel."""
     for channel_id, channel in iteritems(message._client.channels):
         if channel.get('user', "") == message.body['user']:
@@ -311,7 +327,7 @@ def find_pm_channel(message):
 
 
 @listen_to('!(\S+)')
-def handle_public_message(message, message_text):
+def handle_public_message(message, message_text):  # pragma: no cover
     """Listen to the channels, respond to something that looks like a command."""
     logging.debug("Received a public command.  Raw text: %s" % (message.body['text']))
     try:
@@ -348,7 +364,7 @@ def handle_public_message(message, message_text):
 
 
 @respond_to('(.*)')
-def handle_private_message(message, message_text):
+def handle_private_message(message, message_text):  # pragma: no cover
     """Receive a private message from the user and figure out how to respond."""
     logging.debug("Received private message from %s.  Raw text: %s" % (message._client.users[message.body['user']]['real_name'], message.body['text']))
     if message_text.startswith("!"):
@@ -362,24 +378,7 @@ def handle_private_message(message, message_text):
         if reply[0]:
             message.reply(reply[0])
 
-if __name__ == '__main__':
-    try:
-        logging.debug("Opening CR file")
-        with open('CR.txt') as data_file:
-            rules = data_file.readlines()
-    except IOError:
-        logging.error("Unable to open Comprehensive Rules, r search will not be available")
-        rules = []
-
-    terms = {}
-    all_rules = {}
-    for rule in rules:
-        x = rule.split('. ')
-        all_rules[x[0]] = ". ".join(x[1:])
-    del rules
-
-    numCards = -1
-
+if __name__ == '__main__':   # pragma: no cover
     reload(sys)  # Reload does the trick!
     sys.setdefaultencoding('UTF8')
 
