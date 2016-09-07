@@ -54,7 +54,7 @@ try:
     logging.debug("Opening CR file")
     with open('CR.txt') as data_file:
         rules = data_file.readlines()
-except IOError:
+except IOError:  # pragma: no cover
     logging.error("Unable to open Comprehensive Rules, r search will not be available")
     rules = []
 
@@ -65,7 +65,8 @@ for rule in rules:
     all_rules[x[0]] = ". ".join(x[1:])
 del rules
 
-def messagekey(message, *args, **kwargs):
+
+def messagekey(message, *args, **kwargs):   # pragma: no cover
     """Custom hashing function for LRU Cache."""
     key = hashkey(*args, **kwargs)
     key += (message.body['user'],)
@@ -84,7 +85,7 @@ def messagekey(message, *args, **kwargs):
 # Rule search to return multiple possible rules
 
 
-def intersperse(delimiter, seq):
+def intersperse(delimiter, seq):  # pragma: no cover
     """Intersperse a value amongst every item in a list.
 
     https://stackoverflow.com/questions/5655708/python-most-elegant-way-to-intersperse-a-list-with-an-element
@@ -133,12 +134,12 @@ def dispatch_message(message, raw_message, channel):
     If they give us "<string>*", assume that it's "<cardname*>"
     """
     logging.debug("Dispatching message: {} (Raw text {})".format(message, raw_message))
-    if message == "help":
+    if message == "!help":
         return (help(), True)
-    elif message == "helpsearch":
+    elif message == "!helpsearch":
         return (helpsearch(), True)
-    elif message.startswith("url "):
-        return (url(message[4:]), False)
+    elif message.startswith("url"):
+        return (url(raw_message[4:]), False)
     elif message.startswith("printsets"):
         c.execute('SELECT DISTINCT(name), code, releaseDate FROM sets ORDER BY ' + ('releaseDate' if message.endswith("inorder") else 'name') + ' ASC')
         message_out = ""
@@ -177,7 +178,7 @@ def dispatch_message(message, raw_message, channel):
     elif raw_message.startswith("!s ") or raw_message.startswith("!qs "):
         logging.debug("Advanced Search!")
         quick = False
-        if message == "qs":
+        if message.startswith("qs"):
             quick = True
             card_name = raw_message[4:].lower()
         else:
@@ -280,7 +281,7 @@ def dispatch_message(message, raw_message, channel):
             logging.debug("Found {} cards".format(len(cards)))
             if len(cards) > 20:
                 return ("Too many cards to print! ({} > 20). Please narrow search".format(len(cards)), False)
-            if len(cards) <= 5:
+            if len(cards) <= 5 or not channel:
                 return ("\n".join([printCard(c, card, quick=False, slackChannel=channel) for card in cards]), False)
             else:
                 return [("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=False, slackChannel=channel) for card in cards]), True)]
@@ -367,9 +368,9 @@ def handle_public_message(message, message_text):  # pragma: no cover
 def handle_private_message(message, message_text):  # pragma: no cover
     """Receive a private message from the user and figure out how to respond."""
     logging.debug("Received private message from %s.  Raw text: %s" % (message._client.users[message.body['user']]['real_name'], message.body['text']))
-    if message_text.startswith("!"):
-        logging.debug("Stripping leading !")
-        message_text = message_text[1:]
+    if not message_text.startswith("!"):
+        logging.debug("Adding leading !")
+        message_text = "!" + message_text
 
     replies = dispatch_message(message_text.lower().rstrip(), message.body['text'], channel=False)
     if type(replies) is not list:

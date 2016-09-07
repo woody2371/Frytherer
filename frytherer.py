@@ -128,6 +128,7 @@ def cardSearch(cursor, terms):
     do_later = []
     was_not = False
     for term in terms:
+        logging.debug("Processing term {}".format(term))
         term = term.replace('"', '')
         if term.lower() in ["and", "or", "(", ")"]:
             sql_query += " " + term.upper() + " "
@@ -150,20 +151,52 @@ def cardSearch(cursor, terms):
             elif term.startswith("cn:"):
                 sql_query += "number LIKE ?"
                 params.append(term[3:])
-            elif term.startswith("pow"):
+            elif term.startswith("pow") or term.startswith("tou"):
                 # Need to do maths, so convert to number
-                if term[3:].startswith(">") or term[3:].startswith("<"):
+                # TODO: Char Rumbler, and the 2+* type shit
+                if term.startswith("pow"):
+                    col = "power"
+                else:
+                    col = "toughness"
+                operator = ""
+                operand = ""
+                if term[3] == ">" or term[3:].startswith("<"):
                     if term[4] == "=":
+                        operator = term[3:5]
                         if term[5] == "*":
                             logging.error("Invalid P/T inequality")
+                            continue
+                        else:
+                            operand = term[5:]
                     else:
+                        operator = term[3]
                         if term[4] == "*":
                             logging.error("Invalid P/T inequality")
-                    sql_query += "abs(power)" + term[3:].replace("pow", "abs(power)").replace("tou", "abs(toughness)").replace("cmc", "abs(cmc)")
-                else:
-                    sql_query += "power" + term[3:].replace("pow", "power").replace("tou", "toughness").replace(":", "=")
-            elif term.startswith("tou"):
-                sql_query += "toughness" + term[3:].replace("pow", "power").replace("tou", "toughness").replace("cmc", "abs(cmc)").replace(":", "=")
+                            continue
+                        else:
+                            operand = term[4:]
+                    if "cmc" not in operand and "pow" not in operand and "cmc" not in operand and "tou" not in operand:
+                        try:
+                            operand = int(operand)
+                        except ValueError:
+                            logging.warning("Unable to convert power/toughness into an int")
+                            continue
+                    else:
+                        operand = operand.replace("pow", "abs(power)").replace("tou", "abs(toughness)").replace("cmc", "abs(cmc)")
+                    sql_query += "{} != '' AND abs({})".format(col, col) + operator + "?"
+                    params.append(operand)
+                elif term[3] == "=":
+                    operator = term[3]
+                    operand = term[4:]
+                    #  Whitelist column names
+                    if operand in ["cmc", "pow", "tou"]:
+                        sql_query += col + operator + operand
+                    else:
+                        sql_query += col + operator + "?"
+                        params.extend([operand.replace("pow", "power").replace("tou", "toughness")])
+                else:  # Should never get here
+                    logging.error("Invalid power/toughness operator")
+                    continue
             elif term.startswith("cmc"):
                 sql_query += term.replace("pow", "power").replace("tou", "toughness").replace(":", "=")
             elif term.startswith("mana"):
@@ -195,7 +228,8 @@ def cardSearch(cursor, terms):
             elif term.startswith("is:"):
                 # normal, split, flip, double-faced, token, plane, scheme, phenomenon, leveler, vanguard
                 if term[3:].lower() in ["split", "flip"]:
-                    sql_query += "layout = " + term[3:].lower()
+                    sql_query += "layout = ?"
+                    params.append(term[3:].lower())
                 elif term[3:] == "vanilla":
                     sql_query += "(text = '' AND types LIKE '%u''Creature''%')"
                 elif term[3:] == "timeshifted":
@@ -237,7 +271,8 @@ def cardSearch(cursor, terms):
                         query_term.append("colors = '[]'")
                 sql_query += "(" + op.join(query_term) + ")"
             elif term.startswith("o:"):
-                sql_query += "text LIKE replace('%" + term[2:].replace('"', '') + "%', '~', name)"
+                sql_query += "text LIKE replace(?, '~', name)"
+                params.append('%{}%'.format(term[2:]))
             if was_not:
                 sql_query += ")"
                 was_not = False
@@ -452,7 +487,7 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
 
             for fPrint in foreignNames.items():
                 message_out += fPrint[0] + " : " + fPrint[1] + '\n'
-    return message_out
+    return message_out.rstrip()
 
 
 def ruleSearch(all_rules, rule_to_search):
@@ -485,7 +520,7 @@ def help():
     ret += "random - gives a random card\n"
     ret += "printsets - gives a list of all the sets I know about\n"
     ret += "printsetsinorder - gives a list of all the sets in release date order\n"
-    ret += "url <cr|mtr|amtr (<section>)|ipg|aipg (<section>|<infraction>)|jar|peip|pptq|rptq|alldocs> - gives the URL to the requested document"
+    ret += "url <cr|mtr|amtr (<section>)|ipg|aipg (<section>|<infraction>)|jar|peip|pptq|rptq|alldocs> - gives the URL to the requested document\n"
     # ret += "\tallcards <set> - gives a list of all the cards with a given set code (use printsets to get the code)\n"
     # ret += "\tallcardsextend <set> - gives the text of all the cards with a given set code (use printsets to get the code)\n"
     # ret += "\tbooster <set> - gives a randomly generated booster from either set code, or set name\n"
