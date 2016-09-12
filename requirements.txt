@@ -1,0 +1,7 @@
+nose2
+cov-core
+pysqlite
+slackbot
+re2
+cachetools
+pyparsing

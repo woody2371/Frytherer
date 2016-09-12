@@ -96,6 +96,7 @@ def intersperse(delimiter, seq):  # pragma: no cover
 
 rule_regexp = re.compile('!{0,1}(?:\d)+\.(?:.*)')
 bot_command_regex = re.compile('!([^!|&]+)')
+single_quoted_word = re.compile('^(?:\"|\')\w+(?:\"|\')$')
 
 
 def validate_colon_mode(s, loc, tokens):
@@ -122,172 +123,181 @@ total_thing = Combine((colon_total | colon_or_bang_total | math_total) + operand
 super_total = OneOrMore(Optional(OneOrMore(boolean_operators)) + Optional(OneOrMore(brackets)) + total_thing + Optional(OneOrMore(brackets)) + Optional(OneOrMore(boolean_operators)))
 
 
-def dispatch_message(message, raw_message, channel):
+def dispatch_message(incomingMessage, fromChannel):
     """For a message, figure out how to handle it and return the text to reply with.
+    The message should probably start with a "!" or at least individual commands within it should.
 
-    INPUT: message = Message string
-    INPUT: channel = TRUE if message came from a main channel, FALSE if came from PM
-    OUTPUT: (optional: list of) tuple of (reply_message, pm_override)
+    INPUT: incomingMessage = Message string
+    INPUT: fromChannel = TRUE if message came from a main channel, FALSE if came from PM
+    OUTPUT: List of tuple of (reply_message, pm_override)
     OUTPUT: pm_override is TRUE if the reply should go through PM regardless
-
-    If they give us "<string> extend", assume that it's "<cardname extend>".
-    If they give us "<string>*", assume that it's "<cardname*>"
     """
-    logging.debug("Dispatching message: {} (Raw text {})".format(message, raw_message))
-    if message == "!help":
-        return (help(), True)
-    elif message == "!helpsearch":
-        return (helpsearch(), True)
-    elif message.startswith("url"):
-        return (url(raw_message[4:]), False)
-    elif message.startswith("printsets"):
-        c.execute('SELECT DISTINCT(name), code, releaseDate FROM sets ORDER BY ' + ('releaseDate' if message.endswith("inorder") else 'name') + ' ASC')
-        message_out = ""
-        for name, code, date in [(x[0], x[1], x[2]) for x in c.fetchall()]:
-            message_out += name + " (" + code + ")" + " [" + date + "]" + "\n"
-        return (message_out, True)
-    elif message == "random":
-        cards = cardSearch(c, ['en:' + random.choice(allCardNames)])
-        if not cards:
-            return ("No cards found :(", False)
-        return (printCard(c, cards[0], quick=False, slackChannel=channel), False)
-    elif message.endswith("extend"):
-        cards = cardSearch(c, ['en:' + message[:-6].rstrip()])
-        if not cards:
-            return ("", False)
-        return (printCard(c, cards[0], extend=2, quick=False), True)
-    elif message.endswith("*"):
-        cards = cardSearch(c, ['n:' + message[:-1]])
-        if not cards:
-            return ("", False)
-        if len(cards) > 20:
-            return ("Too many cards to print! ({} > 20). Please narrow search".format(len(cards)), False)
-        if channel:
-            # If we've asked for some cards in a channel
-            if len(cards) == 1:
-                # One card is fine, show them
-                return (printCard(c, cards[0], quick=False, slackChannel=channel), False)
-            elif len(cards) <= 5:
-                # 2 - 5 cards is fine, but only show name and mana cost
-                return ("\n".join([printCard(c, card, quick=True, slackChannel=channel) for card in cards]), False)
-            else:
-                # > 5 is only showing name and mana cost and forced to PM
-                return [("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=True, slackChannel=channel) for card in cards]), True)]
-        else:
-            return ("\n".join([printCard(c, card, quick=False, slackChannel=channel) for card in cards] + ["{} result/s".format(len(cards))]), False)
-    elif raw_message.startswith("!s ") or raw_message.startswith("!qs "):
-        logging.debug("Advanced Search!")
-        quick = False
-        if message.startswith("qs"):
-            quick = True
-            card_name = raw_message[4:].lower()
-        else:
-            card_name = raw_message[3:].lower()
-        logging.debug("Searching for {}".format(card_name))
-        output = []
-        try:
-            parsed_data = super_total.parseString(card_name)
-            logging.debug("Parsed it as: {}".format(parsed_data))
-        except (ParseException, ParseFatalException) as e:
-            return ("Unable to parse search terms\n{}".format(e), False)
-
-        last_was_s = False
-        for idx, x in enumerate(parsed_data.asList()):
-            if x in ["and", "or", "not"]:
-                output.append(x)
-                last_was_s = False
-            elif x == "(":
-                if last_was_s:
-                    output.append("AND")
-                output.append("(")
-                last_was_s = False
-            elif x == ")":
-                output.append(")")
-                last_was_s = False
-            else:
-                if last_was_s:
-                    output.append("AND")
-                output.append(x)
-                last_was_s = True
-        logging.debug("Advanced search final terms: {}".format(output))
-        cards = cardSearch(c, output)
-        if not cards:
-            return ("No cards found", False)
-        if len(cards) > 20:
-            return ("Too many cards to print! ({} > 20). Please narrow search".format(len(cards)), False)
-        if channel:
-            # If we've asked for some cards in a channel
-            # If they're quick, <= 10 is fine
-            if quick and len(cards) <= 10:
-                return ("\n".join([printCard(c, card, quick=quick, slackChannel=channel) for card in cards]), False)
-            if len(cards) <= 5:
-                # 1 - 5 cards is fine
-                return ("\n".join([printCard(c, card, quick=quick, slackChannel=channel) for card in cards]), False)
-            else:
-                # > 5 is only showing name and mana cost and forced to PM
-                return [("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=True, slackChannel=channel) for card in cards]), True)]
-        else:
-            return ("\n".join([printCard(c, card, quick=quick, slackChannel=channel) for card in cards] + ["{} result/s".format(len(cards))]), False)
-    elif raw_message.startswith("!r ") or rule_regexp.match(raw_message):
-        logging.debug("Rules query!")
-        if message == "r":
-            message = raw_message[3:]
-        return (ruleSearch(all_rules, message), False)
-    else:
-        logging.debug("Trying to figure out card name")
-        logging.debug("Maybe we get extremely lucky")
-        if message in allCardNames:
-            logging.debug("We do!")
-            cards = cardSearch(c, ['en:' + message])
-            return (printCard(c, cards[0], quick=False, slackChannel=channel), False)
-        logging.debug("We don't")
-        # Handle !card1 !card2
-        # Handle !card1&!card2
-        # Handle Blah !card1 blah !card2
-        # Don't forget if it's a PM we'll have stripped the possible initial ! so let's
-        # use the raw message
-        # TODO: Do it backwards, so longest matches are better
-        command_list = bot_command_regex.findall(raw_message)
-        logging.debug("Command list: {}".format(command_list))
-        cards_found = []
-        for card in command_list:
-            if card in allCardNames:
-                logging.debug("Bailing early due to exact match")
-                cards_found.append('en:"%s"' % card)
-                continue
-            card_tokens = re.split(' |&', raw_message[raw_message.find(card):])
-            logging.debug("Tokenising: {}".format(card_tokens))
-            backup = []
-            real = False
-            for i in xrange(1, len(card_tokens) + 1):
-                card_name = " ".join(card_tokens[:i])
-                if card_tokens[i - 1].startswith("!"):
-                    break
-                if not backup:
-                    backup.extend([x for x in allCardNames if difflib.SequenceMatcher(None, x.split(", ")[0].lower(), card_name.lower()).ratio() >= 0.8])
-                real = difflib.get_close_matches(card_name, allCardNames, cutoff=0.8)
-                if len(real):
-                    cards_found.append('en:"%s"' % real[0])
-                    real = True
-                    break
-            if not real:
-                if backup:
-                    cards_found.append('en:"%s"' % backup[0])
-        logging.debug("Finally, the cards: {}".format(cards_found))
-        if cards_found:
-            terms = list(intersperse("OR", cards_found))
-            logging.debug("Searching for {}".format(terms))
-            cards = cardSearch(c, terms)
-            logging.debug("Found {} cards".format(len(cards)))
+    logging.debug("Dispatching message: {}".format(incomingMessage))
+    command_list = bot_command_regex.findall(incomingMessage)
+    logging.debug("Command list: {}".format(command_list))
+    ret = []
+    for message in command_list:
+        if re.match(single_quoted_word, message):
+            logging.debug("Single quoted word detected, stripping")
+            message = message[1:-1]
+        message_words = message.split(" ")
+        if message == "help" or message_words[0] == "help":
+            ret.append((help(), True))
+        elif message == "helpsearch" or message_words[0] == "helpsearch":
+            ret.append((helpsearch(), True))
+        elif message[0:4] in ["url ", "mtr ", "ipg ", "mtr", "ipg", "amtr", "aipg"]:
+            ret.append((url(message), False))
+        elif message.startswith("printsets"):
+            c.execute('SELECT DISTINCT(name), code, releaseDate FROM sets ORDER BY ' + ('releaseDate' if message.endswith("inorder") else 'name') + ' ASC')
+            message_out = ""
+            for name, code, date in [(x[0], x[1], x[2]) for x in c.fetchall()]:
+                message_out += name + " (" + code + ")" + " [" + date + "]" + "\n"
+            ret.append((message_out, True))
+        elif message == "random":
+            cards = cardSearch(c, ['en:' + random.choice(allCardNames)])
+            if not cards:
+                return ("No cards found :(", False)
+            ret.append((printCard(c, cards[0], quick=False, slackChannel=fromChannel), False))
+        elif message.endswith("extend"):
+            cards = cardSearch(c, ['en:' + message[:-6].rstrip()])
+            if not cards:
+                return ("", False)
+            ret.append((printCard(c, cards[0], extend=2, quick=False), True))
+        elif message.endswith("*"):
+            cards = cardSearch(c, ['n:' + message[:-1]])
+            if not cards:
+                ret.append(("", False))
             if len(cards) > 20:
-                return ("Too many cards to print! ({} > 20). Please narrow search".format(len(cards)), False)
-            if len(cards) <= 5 or not channel:
-                return ("\n".join([printCard(c, card, quick=False, slackChannel=channel) for card in cards]), False)
+                ret.append(("Too many cards to print! ({} > 20). Please narrow search".format(len(cards)), False))
+            if fromChannel:
+                # If we've asked for some cards in a channel
+                if len(cards) == 1:
+                    # One card is fine, show them
+                    ret.append((printCard(c, cards[0], quick=False, slackChannel=fromChannel), False))
+                elif len(cards) <= 5:
+                    # 2 - 5 cards is fine, but only show name and mana cost
+                    ret.append(("\n".join([printCard(c, card, quick=True, slackChannel=fromChannel) for card in cards]), False))
+                else:
+                    # > 5 is only showing name and mana cost and forced to PM
+                    ret.extend([("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=True, slackChannel=fromChannel) for card in cards]), True)])
             else:
-                return [("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=False, slackChannel=channel) for card in cards]), True)]
+                ret.append(("\n".join([printCard(c, card, quick=False, slackChannel=fromChannel) for card in cards] + ["{} result/s".format(len(cards))]), False))
+        elif message.startswith("s ") or message.startswith("qs "):
+            logging.debug("Advanced Search!")
+            quick = False
+            if message.startswith("qs"):
+                quick = True
+                card_name = message[3:].lower()
+            else:
+                card_name = message[2:].lower()
+            logging.debug("Searching for {}".format(card_name))
+            output = []
+            try:
+                parsed_data = super_total.parseString(card_name)
+                logging.debug("Parsed it as: {}".format(parsed_data))
+            except (ParseException, ParseFatalException) as e:
+                ret.append(("Unable to parse search terms\n{}".format(e), False))
+                continue
+
+            last_was_s = False
+            for idx, x in enumerate(parsed_data.asList()):
+                if x in ["and", "or", "not"]:
+                    output.append(x)
+                    last_was_s = False
+                elif x == "(":
+                    if last_was_s:
+                        output.append("AND")
+                    output.append("(")
+                    last_was_s = False
+                elif x == ")":
+                    output.append(")")
+                    last_was_s = False
+                else:
+                    if last_was_s:
+                        output.append("AND")
+                    output.append(x)
+                    last_was_s = True
+            logging.debug("Advanced search final terms: {}".format(output))
+            cards = cardSearch(c, output)
+            if not cards:
+                ret.append(("No cards found", False))
+            if len(cards) > 20:
+                ret.append(("Too many cards to print! ({} > 20). Please narrow search".format(len(cards)), False))
+            if fromChannel:
+                # If we've asked for some cards in a channel
+                # If they're quick, <= 10 is fine
+                if quick and len(cards) <= 10:
+                    ret.append(("\n".join([printCard(c, card, quick=quick, slackChannel=fromChannel) for card in cards]), False))
+                if len(cards) <= 5:
+                    # 1 - 5 cards is fine
+                    ret.append(("\n".join([printCard(c, card, quick=quick, slackChannel=fromChannel) for card in cards]), False))
+                else:
+                    # > 5 is only showing name and mana cost and forced to PM
+                    ret.extend([("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=True, slackChannel=fromChannel) for card in cards]), True)])
+            else:
+                ret.append(("\n".join([printCard(c, card, quick=quick, slackChannel=fromChannel) for card in cards] + ["{} result/s".format(len(cards))]), False))
+        elif message.startswith("r ") or rule_regexp.match(message):
+            logging.debug("Rules query!")
+            if message.startswith("r "):
+                message = message[2:]
+            ret.append((ruleSearch(all_rules, message), False))
         else:
-            logging.debug("I didn't understand the command")
-            return ("", False)
+            logging.debug("Trying to figure out card name")
+            logging.debug("Maybe we get extremely lucky")
+            if message in allCardNames:
+                logging.debug("We do!")
+                cards = cardSearch(c, ['en:' + message])
+                ret.append((printCard(c, cards[0], quick=False, slackChannel=fromChannel), False))
+            logging.debug("We don't")
+            # Handle !card1 !card2
+            # Handle !card1&!card2
+            # Handle Blah !card1 blah !card2
+            # Don't forget if it's a PM we'll have stripped the possible initial ! so let's
+            # use the raw message
+            # TODO: Do it backwards, so longest matches are better
+            # command_list = bot_command_regex.findall(message)
+            # logging.debug("Command list: {}".format(command_list))
+            cards_found = []
+            # for card in command_list:
+            #     if card in allCardNames:
+            #         logging.debug("Bailing early due to exact match")
+            #         cards_found.append('en:"%s"' % card)
+            #         continue
+                # card_tokens = re.split(' |&', message[message.find(card):])
+                # logging.debug("Tokenising: {}".format(card_tokens))
+                # backup = []
+                # real = False
+                # for i in xrange(1, len(card_tokens) + 1):
+                #     card_name = " ".join(card_tokens[:i])
+                #     if card_tokens[i - 1].startswith("!"):
+                #         break
+                #     if not backup:
+                #         backup.extend([x for x in allCardNames if difflib.SequenceMatcher(None, x.split(", ")[0].lower(), card_name.lower()).ratio() >= 0.8])
+                #     real = difflib.get_close_matches(card_name, allCardNames, cutoff=0.8)
+                #     if len(real):
+                #         cards_found.append('en:"%s"' % real[0])
+                #         real = True
+                #         break
+                # if not real:
+                #     if backup:
+                #         cards_found.append('en:"%s"' % backup[0])
+            logging.debug("Finally, the cards: {}".format(cards_found))
+            if cards_found:
+                terms = list(intersperse("OR", cards_found))
+                logging.debug("Searching for {}".format(terms))
+                cards = cardSearch(c, terms)
+                logging.debug("Found {} cards".format(len(cards)))
+                if len(cards) > 20:
+                    ret.append(("Too many cards to print! ({} > 20). Please narrow search".format(len(cards)), False))
+                if len(cards) <= 5 or not fromChannel:
+                    ret.append(("\n".join([printCard(c, card, quick=False, slackChannel=fromChannel) for card in cards]), False))
+                else:
+                    ret.extend([("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=False, slackChannel=fromChannel) for card in cards]), True)])
+            else:
+                logging.debug("I didn't understand the command")
+                ret.append(("", False))
+    logging.debug("--- Done ---")
+    return ret
 
 
 def send_user_pm(user, text="Initiating comms..."):  # pragma: no cover
@@ -327,20 +337,16 @@ def find_pm_channel(message):  # pragma: no cover
     return None
 
 
-@listen_to('!(\S+)')
+@listen_to('!(\w+)')
 def handle_public_message(message, message_text):  # pragma: no cover
     """Listen to the channels, respond to something that looks like a command."""
-    logging.debug("Received a public command.  Raw text: %s" % (message.body['text']))
+    logging.debug("Received a public command from {}.  Raw text: {}".format(message._client.users[message.body['user']]['real_name'], message.body['text']))
     try:
         logging.debug("The channel name is #{}".format(message.channel._body['name']))
     except KeyError:
         logging.debug("Private channel ID {}".format(message.body['channel']))
-    logging.debug("The regexp gives me {}".format(message_text))
-    if message_text.startswith("!"):
-        logging.debug("Stripping leading !")
-        message_text = message_text[1:]
 
-    replies = dispatch_message(message_text.lower().rstrip(), message.body['text'], channel=True)
+    replies = dispatch_message((message.body['text']).lower().rstrip(), fromChannel=True)
     if type(replies) is not list:
         replies = [replies]
     for reply in replies:
@@ -370,9 +376,9 @@ def handle_private_message(message, message_text):  # pragma: no cover
     logging.debug("Received private message from %s.  Raw text: %s" % (message._client.users[message.body['user']]['real_name'], message.body['text']))
     if not message_text.startswith("!"):
         logging.debug("Adding leading !")
-        message_text = "!" + message_text
+        message.body['text'] = "!" + message.body['text']
 
-    replies = dispatch_message(message_text.lower().rstrip(), message.body['text'], channel=False)
+    replies = dispatch_message(message.body['text'].lower().rstrip(), fromChannel=False)
     if type(replies) is not list:
         replies = [replies]
     for reply in replies:

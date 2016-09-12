@@ -14,7 +14,8 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 mana_regexp = re.compile('([0-9]*)(b*)(g*)(r*)(u*)(w*)')
-section_regexp = re.compile('(aipg|amtr) (?:(appendix [a-f])|(\d+)(?:(?:\.)(\d)){0,1})')
+section_regexp = re.compile('a{0,1}(ipg|mtr) (?:(appendix [a-z])|(\d+)(?:(?:\.)(\d{1,2})){0,1})')
+single_quoted_word = re.compile('^(?:\"|\')\w+(?:\"|\')$')
 
 
 def gathererCapitalise(y):
@@ -178,7 +179,7 @@ def cardSearch(cursor, terms):
                     if "cmc" not in operand and "pow" not in operand and "cmc" not in operand and "tou" not in operand:
                         try:
                             operand = int(operand)
-                        except ValueError:
+                        except ValueError:  # pragma: no cover
                             logging.warning("Unable to convert power/toughness into an int")
                             continue
                     else:
@@ -194,7 +195,8 @@ def cardSearch(cursor, terms):
                     else:
                         sql_query += col + operator + "?"
                         params.extend([operand.replace("pow", "power").replace("tou", "toughness")])
-                else:  # Should never get here
+                else:  # pragma: no cover
+                    # Should never get here
                     logging.error("Invalid power/toughness operator")
                     continue
             elif term.startswith("cmc"):
@@ -283,6 +285,11 @@ def cardSearch(cursor, terms):
     sql_query += " GROUP BY name"
     logging.debug(sql_query)
     logging.debug(params)
+    for (idx, param) in enumerate(params):
+        if re.match(single_quoted_word, str(param)):
+            logging.debug("Single quoted word detected ({}), stripping".format(param))
+            params[idx] = param[1:-1]
+    logging.debug("Fixed: {}".format(params))
     cards = cursor.execute(sql_query, params).fetchall()
     if len(do_later) > 0:
         return_cards = []
@@ -290,7 +297,6 @@ def cardSearch(cursor, terms):
             if term.startswith("mana"):
                 input_string = "".join(sorted(term[6:].replace("{", "").replace("}", "").lower()))
                 input_array = mana_regexp.split(input_string)
-
                 for card in cards:
                     if card["manacost"] == "":
                         continue
@@ -520,7 +526,7 @@ def help():
     ret += "random - gives a random card\n"
     ret += "printsets - gives a list of all the sets I know about\n"
     ret += "printsetsinorder - gives a list of all the sets in release date order\n"
-    ret += "url <cr|mtr|amtr (<section>)|ipg|aipg (<section>|<infraction>)|jar|peip|pptq|rptq|alldocs> - gives the URL to the requested document\n"
+    ret += "url <cr|(a)mtr <section>|(a)ipg <section>|<infraction>|jar|peip|pptq|rptq|alldocs> - gives the URL to the requested document\n"
     # ret += "\tallcards <set> - gives a list of all the cards with a given set code (use printsets to get the code)\n"
     # ret += "\tallcardsextend <set> - gives the text of all the cards with a given set code (use printsets to get the code)\n"
     # ret += "\tbooster <set> - gives a randomly generated booster from either set code, or set name\n"
@@ -599,76 +605,76 @@ def helpsearch():
 
 def url(document):
     """Work out the appropriate URL and return it to the user."""
+    logging.debug("Serving URL: {}".format(document))
+    if document.startswith("url "):
+        document = document[4:]
+        logging.debug("Formatting: {}".format(document))
+    doc_words = document.split(" ")
     ret = ""
-    if document == "mtr":
-        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_mtr_22jul16_en.pdf"
-    elif document == "ipg":
-        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_ipg_22jul16_en.pdf"
-    elif document == "jar":
+
+    if doc_words[0] == "jar":
         ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_jar_4.pdf"
-    elif document == "peip":
+    elif doc_words[0] == "peip":
         ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_peip-16_16feb8_en.pdf"
-    elif document == "cr":
+    elif doc_words[0] == "cr":
         ret = "http://yawgatog.com/resources/magic-rules/"
-    elif document == "alldocs":
+    elif doc_words[0] == "alldocs":
         ret = "http://wpn.wizards.com/en/resources/rules-documents"
-    elif document == "pptq":
+    elif doc_words[0] == "pptq":
         ret = "http://magic.wizards.com/en/events/instoreplay/pptqaer"
-    elif document == "rptq":
+    elif doc_words[0] == "rptq":
         ret = "http://magic.wizards.com/en/events/instoreplay/rptqaer"
-    elif document == "aipg":
-        ret = "http://blogs.magicjudges.org/rules/ipg/"
-    elif document == "amtr":
-        ret = "http://blogs.magicjudges.org/rules/mtr/"
-    elif document == "mt" or document == "missed trigger":
+    elif doc_words[0] == "mt" or " ".join(doc_words[0:2]) == "missed trigger":
         ret = "http://blogs.magicjudges.org/rules/ipg2-1/"
-    elif document == "l@ec" or document == "lec" or document == "looking at extra cards":
+    elif doc_words[0] == "l@ec" or doc_words[0] == "lec" or " ".join(document[0:3]) == "looking at extra cards":
         ret = "http://blogs.magicjudges.org/rules/ipg2-2/"
-    elif document == "hce" or document == "hidden card error":
+    elif doc_words[0] == "hce" or " ".join(document[0:2]) == "hidden card error":
         ret = "http://blogs.magicjudges.org/rules/ipg2-3/"
-    elif document == "mpe" or document == "mulligan procedure error":
+    elif doc_words[0] == "mpe" or " ".join(document[0:3]) == "mulligan procedure error":
         ret = "http://blogs.magicjudges.org/rules/ipg2-4/"
-    elif document == "grv" or document == "game rule violation":
+    elif doc_words[0] == "grv" or " ".join(document[0:3]) == "game rule violation":
         ret = "http://blogs.magicjudges.org/rules/ipg2-5/"
-    elif document == "ftmgs" or document == "failure to maintain game state":
+    elif doc_words[0] == "ftmgs" or " ".join(document[0:4]) == "failure to maintain game state":
         ret = "http://blogs.magicjudges.org/rules/ipg2-6/"
-    elif document == "tardiness":
+    elif doc_words[0] == "tardiness":
         ret = "http://blogs.magicjudges.org/rules/ipg3-1/"
-    elif document == "oa" or document == "outside assistance":
+    elif doc_words[0] == "oa" or " ".join(doc_words[0:2]) == "outside assistance":
         ret = "http://blogs.magicjudges.org/rules/ipg3-2/"
-    elif document == "slow play":
+    elif " ".join(doc_words[0:2]) == "slow play":
         ret = "http://blogs.magicjudges.org/rules/ipg3-3/"
-    elif document == "insufficient shuffling":
+    elif " ".join(doc_words[0:2]) == "insufficient shuffling":
         ret = "http://blogs.magicjudges.org/rules/ipg3-4/"
-    elif document == "ddlp" or document == "d/dlp" or ("deck" in document and "problem" in document):
+    elif doc_words[0] == "ddlp" or doc_words[0] == "d/dlp" or ("deck" in document and "problem" in document):
         ret = "http://blogs.magicjudges.org/rules/ipg3-5/"
-    elif document == "lpv" or document == "limited procedure violation":
+    elif doc_words[0] == "lpv" or " ".join(document[0:3]) == "limited procedure violation":
         ret = "http://blogs.magicjudges.org/rules/ipg3-6/"
-    elif document == "cpv" or document == "communication policy violation":
+    elif doc_words[0] == "cpv" or " ".join(document[0:3]) == "communication policy violation":
         ret = "http://blogs.magicjudges.org/rules/ipg3-7/"
-    elif document == "mc" or document == "marked cards":
+    elif doc_words[0] == "mc" or " ".join(document[0:2]) == "marked cards":
         ret = "http://blogs.magicjudges.org/rules/ipg3-8/"
-    elif document.startswith("usc") or "unsporting conduct" in document:
-        if "mi" in document:
+    elif doc_words[0] == "usc" or " ".join(document[0:2]) == "unsporting conduct":
+        if "minor" in document:
             ret = "http://blogs.magicjudges.org/rules/ipg4-1/"
-        elif "ma" in document:
+        elif "major" in document:
             ret = "http://blogs.magicjudges.org/rules/ipg4-2/"
-    elif document == "idaw" or document == "improperly determining a winner":
+    elif doc_words[0] == "idaw" or " ".join(document[0:4]) == "improperly determining a winner":
         ret = "http://blogs.magicjudges.org/rules/ipg4-3/"
-    elif document == "b&w" or "bribery" in document:
+    elif doc_words[0] == "bribery":
         ret = "http://blogs.magicjudges.org/rules/ipg4-4/"
-    elif document == "ab" or "aggressive" in document:
+    elif doc_words[0] == "ab" or doc_words[0] == "aggressive":
         ret = "http://blogs.magicjudges.org/rules/ipg4-5/"
-    elif document == "totm" or "theft" in document:
+    elif doc_words[0] == "totm" or doc_words[0] == "theft":
         ret = "http://blogs.magicjudges.org/rules/ipg4-6/"
-    elif document == "stalling":
+    elif doc_words[0] == "stalling":
         ret = "http://blogs.magicjudges.org/rules/ipg4-7/"
-    elif document == "cheating":
+    elif doc_words[0] == "cheating":
         ret = "http://blogs.magicjudges.org/rules/ipg4-8/"
     elif section_regexp.match(document):
         try:
+            logging.debug("URL Section Match detected")
             (doco, appendix, main, sub) = (section_regexp.match(document)).groups()
-            if doco == "aipg":
+            logging.debug("Doco: {} Appendix: {} Main: {} Sub: {}".format(doco, appendix, main, sub))
+            if doco == "ipg":
                 if appendix:
                     (app, letter) = appendix.split(" ")
                     if (letter != "a" and letter != "b"):
@@ -688,19 +694,19 @@ def url(document):
                             (main == 3 and (sub >= 1 and sub <= 8)) or
                             (main == 4 and (sub >= 1 and sub <= 8))
                         ):
-                            ret = "http://blogs.magicjudges.org/rules/ipg%d-%d" % (main, sub)
+                            ret = "http://blogs.magicjudges.org/rules/ipg%d-%d/" % (main, sub)
                         else:
                             ret = "Invalid section requested"
                 else:
                     ret = "Invalid section requested"
-            elif doco == "amtr":
+            elif doco == "mtr":
                 if appendix:
                     (app, letter) = appendix.split(" ")
                     if(letter != "a" and letter != "b" and letter != "c" and letter != "d" and letter != "e" and letter != "f"):
                         ret = "Invalid section requested"
                     else:
                         ret = "http://blogs.magicjudges.org/rules/mtr-%s-%s/" % (app, letter)
-                        return ret
+                    return ret
                 main = int(main)
                 if (main >= 1 and main <= 10):
                     if sub is None:
@@ -719,7 +725,7 @@ def url(document):
                             (main == 9 and (sub >= 1 and sub <= 7)) or
                             (main == 10 and (sub >= 1 and sub <= 4))
                         ):
-                            ret = "http://blogs.magicjudges.org/rules/mtr%d-%d" % (main, sub)
+                            ret = "http://blogs.magicjudges.org/rules/mtr%d-%d/" % (main, sub)
                         else:
                             ret = "Invalid section requested"
                 else:
@@ -729,6 +735,14 @@ def url(document):
         except:  # pragma: no cover
             logging.debug(sys.exc_info())
             ret = "Something went wrong parsing your request"
+    elif doc_words[0] == "mtr":
+        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_mtr_22jul16_en.pdf"
+    elif doc_words[0] == "ipg":
+        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_ipg_22jul16_en.pdf"
+    elif doc_words[0] == "aipg":
+        ret = "http://blogs.magicjudges.org/rules/ipg/"
+    elif doc_words[0] == "amtr":
+        ret = "http://blogs.magicjudges.org/rules/mtr/"
     else:
         ret = "I didn't understand what document you wanted"
     return ret

@@ -22,6 +22,17 @@ for rule in rules:
     all_rules[x[0]] = ". ".join(x[1:])
 
 
+def tryStartsWith(command, expected):
+    return (dispatch_message(command, False)[0][0].startswith(expected) and
+            dispatch_message("Some Words Before " + command, False)[0][0].startswith(expected) and
+            dispatch_message(command + " Some Words After", False)[0][0].startswith(expected) and
+            dispatch_message("Some Words Before " + command + " Some Words After", False)[0][0].startswith(expected) and
+            dispatch_message(command, True)[0][0].startswith(expected) and
+            dispatch_message("Some Words Before " + command, True)[0][0].startswith(expected) and
+            dispatch_message(command + " Some Words After", True)[0][0].startswith(expected) and
+            dispatch_message("Some Words Before " + command + " Some Words After", True)[0][0].startswith(expected))
+
+
 class FrythererTestCases(unittest.TestCase):
     def setUp(self):
         global all_rules
@@ -99,10 +110,11 @@ class FrythererTestCases(unittest.TestCase):
         self.assertTrue(printCard(self.c, tg, quick=True, short=True, ret=True), "Transguild Courier ({4})- A C - 3/3")
 
     def testURL(self):
-        for doc in ["mtr", "ipg", "jar", "peip", "cr", "alldocs", "pptq", "rptq", "aipg", "amtr", "mt", "l@ec", "hce", "mpe", "grv", "ftmgs", "tardiness", "oa", "slow play", "insufficient shuffling", "ddlp", "lpv", "cpv", "mc", "usc minor", "usc major", "idaw", "b&w", "ab", "totm", "stalling", "cheating", "amtr 4.2", "aipg 4.2", "amtr appendix a", "aipg appendix a"]:
+        for doc in ["mtr", "ipg", "jar", "peip", "cr", "alldocs", "pptq", "rptq", "aipg", "amtr", "mt", "l@ec", "hce", "mpe", "grv", "ftmgs", "tardiness", "oa", "slow play", "insufficient shuffling", "ddlp", "lpv", "cpv", "mc", "usc minor", "usc major", "idaw", "bribery", "ab", "totm", "stalling", "cheating", "amtr 4.2", "aipg 4.2", "amtr appendix a", "aipg appendix a"]:
             self.assertTrue(url(doc).startswith("http://"))
         for doc in ["abc", "aipg appendix z", "amtr appendix z", "aipg 100.1", "aipg 100", "amtr 100.1", "amtr 100"]:
             self.assertFalse(url(doc).startswith("http://"))
+        self.assertEqual(url("amtr 1.10"), "http://blogs.magicjudges.org/rules/mtr1-10/")
 
     def testRules(self):
         self.assertEqual(ruleSearch({}, "whatever"), "Rules search not available")
@@ -112,32 +124,6 @@ class FrythererTestCases(unittest.TestCase):
 
 
 class BotTestCases(unittest.TestCase):
-    class Channel(object):
-        # Mock slack channel
-        def __init__(self):
-            self._body = {}
-            self._body['name'] = '#TestChan'
-
-    class Client(object):
-        # Mock slack client
-        def __init__(self):
-            self.channels = {}
-            self.users = {}
-            self.users['Fry'] = {}
-            self.users['Fry']['real_name'] = "Fry Frybergenstein"
-
-    class Message(object):
-        # Mock message to pretend we're slack
-        def __init__(self, client, channel):
-            self._client = client
-            self.channel = channel
-            self.body = {}
-            self.body['channel'] = "Test Channel"
-            self.body['user'] = "Fry"
-
-        def reply(self, test):
-            print test
-
     def setUp(self):
         self.startTime = time.time()
 
@@ -149,63 +135,48 @@ class BotTestCases(unittest.TestCase):
 
     """Tests for responding to commands"""
     def testHelp(self):
-        # cl = self.Client()
-        # ch = self.Channel()
-        # m = self.Message(cl, ch)
-        # m.body['text'] = "help"
-        # handle_private_message(m, m.body['text'])
-        # m.body['text'] = "!help"
-        # handle_private_message(m, m.body['text'])
-        self.assertTrue(dispatch_message("help", "!help", False)[0].startswith("Welcome to Frytherer"))
-        self.assertTrue(dispatch_message("help", "help", False)[0].startswith("Welcome to Frytherer"))
-        self.assertTrue(dispatch_message("help", "!help", True)[0].startswith("Welcome to Frytherer"))
+        self.assertTrue(tryStartsWith("!help", "Welcome to Frytherer"))
 
     def testHelpSearch(self):
-        self.assertTrue(dispatch_message("helpsearch", "!helpsearch", False)[0].startswith("All these options"))
-        self.assertTrue(dispatch_message("helpsearch", "helpsearch", False)[0].startswith("All these options"))
-        self.assertTrue(dispatch_message("helpsearch", "!helpsearch", True)[0].startswith("All these options"))
+        self.assertTrue(tryStartsWith("!helpsearch", "All these options"))
 
     def testUrl(self):
-        #  TODO: FIX self.assertTrue(dispatch_message("url", "!url cr", False)[0].startswith("http://"))
-        self.assertTrue(dispatch_message("url", "url cr", False)[0].startswith("http://"))
-        #  self.assertTrue(dispatch_message("url", "!url cr", True)[0].startswith("http://"))
-        # self.assertTrue(dispatch_message("url", "!url amtr 1.10", False)[0].startswith("http://"))
-        # self.assertTrue(dispatch_message("url", "url amtr 1.10", False)[0].startswith("http://"))
-        # self.assertTrue(dispatch_message("url", "!url amtr 1.10", True)[0].startswith("http://"))
-        # Also !url mtr <section>
-        # Also: !mtr <section>
+        for doc in ["!url amtr 1.10", "!url amtr 1.1", "!amtr 1.10", "!amtr 1.1", "!mtr 1.10", "!mtr 1.1" "!ipg 1.4"]:
+            self.assertTrue(tryStartsWith(doc, "http://"))
+        for doc in ["!url amtr 1.13", "!amtr 1.13", "!mtr 1.13", "!ipg 1.10"]:
+            self.assertTrue(tryStartsWith(doc, "Invalid section requested"))
+        for doc in ["mtr", "ipg", "jar", "peip", "cr", "alldocs", "pptq", "rptq", "aipg", "amtr", "mt", "l@ec", "hce", "mpe", "grv", "ftmgs", "tardiness", "oa", "slow play", "insufficient shuffling", "ddlp", "lpv", "cpv", "mc", "usc minor", "usc major", "idaw", "bribery", "ab", "totm", "stalling", "cheating", "amtr 4.2", "aipg 4.2", "amtr appendix a", "aipg appendix a"]:
+            self.assertTrue(tryStartsWith(doc, "http://"))
+        for doc in ["abc", "aipg appendix z", "amtr appendix z", "aipg 100.1", "aipg 100", "amtr 100.1", "amtr 100"]:
+            self.assertFalse(tryStartsWith("!url " + doc, "http://"))
+        self.assertEqual(dispatch_message("!url mtr 1.10", False)[0], ("http://blogs.magicjudges.org/rules/mtr1-10/", False))
+        self.assertEqual(dispatch_message("!url mtr 1.10", True)[0], ("http://blogs.magicjudges.org/rules/mtr1-10/", False))
+        self.assertEqual(dispatch_message("!url mtr 1.1", False)[0], ("http://blogs.magicjudges.org/rules/mtr1-1/", False))
+        self.assertEqual(dispatch_message("!url mtr 1.1", True)[0], ("http://blogs.magicjudges.org/rules/mtr1-1/", False))
 
     def testGetCard(self):
         # Single card that exists (single word)
-        self.assertEqual(dispatch_message("island", "!island", False)[0], "Island\n\nBasic Land - Island")
-        self.assertEqual(dispatch_message("island", "island", False)[0], "Island\n\nBasic Land - Island")
-        self.assertEqual(dispatch_message("island", "!island", True)[0], "*Island* |Basic Land - Island|")
+        self.assertEqual(dispatch_message("!island", False)[0], ("Island\n\nBasic Land - Island", False))
+        self.assertEqual(dispatch_message("!island", True)[0], ("*Island* |Basic Land - Island|", False))
 
         # Single card that doesn't exist (single word)
-        self.assertEqual(dispatch_message("fryland", "!fryland", False)[0], "")
-        self.assertEqual(dispatch_message("fryland", "fryland", False)[0], "")
-        self.assertEqual(dispatch_message("fryland", "!fryland", True)[0], "")
+        self.assertEqual(dispatch_message("!fryland", False)[0], ("", False))
+        self.assertEqual(dispatch_message("!fryland", True)[0], ("", False))
 
         # Weird formatting
         # FIX: To use fast search
-        self.assertEqual(dispatch_message("\"island\"", "!\"island\"", False)[0], "Island\n\nBasic Land - Island")
-        # FIX: To not fail
-        # self.assertEqual(dispatch_message("\"island\"", "\"island\"", False)[0], "Island\n\nBasic Land - Island\n\n")
-        # FIX: To use fast search
-        self.assertEqual(dispatch_message("\"island\"", "!\"island\"", True)[0], "*Island* |Basic Land - Island|")
-        # FIX: To use fast search
-        self.assertEqual(dispatch_message("'island'", "!'island'", False)[0], "Island\n\nBasic Land - Island")
+        self.assertEqual(dispatch_message("!\"island\"", False)[0], ("Island\n\nBasic Land - Island", False))
+        self.assertEqual(dispatch_message("!\"island\"", True)[0], ("*Island* |Basic Land - Island|", False))
+        self.assertEqual(dispatch_message("!'island'", False)[0], ("Island\n\nBasic Land - Island", False))
+        self.assertEqual(dispatch_message("!'island'", True)[0], ("*Island* |Basic Land - Island|", False))
 
         # Single card that exists (multiple word)
-        self.assertTrue(dispatch_message("privileged", "!privileged position", False)[0].startswith("Privileged Position"))
-        # FIX: To not fail
-        # self.assertTrue(dispatch_message("privileged", "privileged position", False)[0].startswith("Privileged Position"))
-        self.assertTrue(dispatch_message("privileged", "!privileged position", True)[0].startswith("*Privileged Position"))
+        self.assertTrue(dispatch_message("!privileged position", False)[0][0].startswith("Privileged Position"))
+        self.assertTrue(dispatch_message("!privileged position", True)[0][0].startswith("*Privileged Position"))
 
         # Single card that doesn't exist (multiple word)
-        self.assertEqual(dispatch_message("frycanic", "!frycanic fryland", False)[0], "")
-        self.assertEqual(dispatch_message("frycanic", "frycanic fryland", False)[0], "")
-        self.assertEqual(dispatch_message("frycanic", "!frycanic fryland", True)[0], "")
+        self.assertEqual(dispatch_message("!frycanic fryland", False)[0], ("", False))
+        self.assertEqual(dispatch_message("!frycanic fryland", True)[0], ("", False))
 
         # # Multiple cards that exist (single word) -- <= five
         # self.assertEqual(dispatch_message("island !mountain !swamp !plains !forest", "!island !mountain !swamp !plains !forest", False)[0], u'Forest\n\nBasic Land - Forest\nIsland\n\nBasic Land - Island\nMountain\n\nBasic Land - Mountain\nPlains\n\nBasic Land - Plains\nSwamp\n\nBasic Land - Swamp')
@@ -218,113 +189,103 @@ class BotTestCases(unittest.TestCase):
         # self.assertTrue(len(dispatch_message("island !mountain !swamp !plains !forest !Gigantoplasm", "!island !mountain !swamp !plains !forest !Gigantoplasm", False)[0]) > 50)
         # self.assertTrue(len(dispatch_message("island !mountain !swamp !plains !forest !Gigantoplasm", "island !mountain !swamp !plains !forest !Gigantoplasm", False)[0]) > 50)
 
+    def testSentences(self):
+        pass
+
     def testGetCardExtend(self):
-        self.assertTrue(len(dispatch_message("island extend", "!island extend", False)[0]) > 50)
-        self.assertTrue(len(dispatch_message("island extend", "island extend", False)[0]) > 50)
-        self.assertTrue(len(dispatch_message("island extend", "!island extend", True)[0]) > 50)
-        self.assertEqual(dispatch_message("fryland extend", "!fryland extend", False)[0], "")
-        self.assertEqual(dispatch_message("fryland extend", "fryland extend", False)[0], "")
-        self.assertEqual(dispatch_message("fryland extend", "!fryland extend", True)[0], "")
+        self.assertTrue(len(dispatch_message("!island extend", False)[0][0]) > 50)
+        self.assertTrue(len(dispatch_message("!island extend", True)[0][0]) > 50)
+        self.assertEqual(dispatch_message("!fryland extend", False)[0], "")
+        self.assertEqual(dispatch_message("!fryland extend", True)[0], "")
 
     def testGetCardStar(self):
         # Cards are found
-        self.assertTrue(len(dispatch_message("island*", "!island*", False)[0]) > 50)
-        self.assertTrue(len(dispatch_message("island*", "island*", False)[0]) > 50)
-        self.assertEqual(dispatch_message("island*", "!island*", True)[0][0], "9 results sent to PM")
-        self.assertTrue(len(dispatch_message("island*", "!island*", True)[1][0]) > 50)
+        self.assertTrue(len(dispatch_message("!island*", False)[0][0]) > 50)
+        self.assertEqual(dispatch_message("!island*", True)[0][0], "9 results sent to PM")
+        self.assertTrue(len(dispatch_message("!island*", True)[1][0]) > 50)
 
         # Cards aren't found
-        self.assertEqual(dispatch_message("fryland*", "!fryland*", False)[0], "")
-        self.assertEqual(dispatch_message("fryland*", "fryland*", False)[0], "")
-        self.assertEqual(dispatch_message("fryland*", "!fryland*", True)[0], "")
+        self.assertEqual(dispatch_message("!fryland*", False)[0], ("", False))
+        self.assertEqual(dispatch_message("!fryland*", True)[0], ("", False))
 
         # Too many cards are found
-        self.assertTrue(dispatch_message("Phyrexian*", "!Phyrexian*", False)[0].startswith("Too many cards to print"))
-        self.assertTrue(dispatch_message("Phyrexian*", "Phyrexian*", False)[0].startswith("Too many cards to print"))
-        self.assertTrue(dispatch_message("Phyrexian*", "!Phyrexian*", True)[0].startswith("Too many cards to print"))
+        self.assertTrue(dispatch_message("!Phyrexian*", False)[0][0].startswith("Too many cards to print"))
+        self.assertTrue(dispatch_message("!Phyrexian*", True)[0][0].startswith("Too many cards to print"))
 
         # Exactly one card is found
-        self.assertEqual(dispatch_message("Phyrexian War Beast*", "!Phyrexian War Beast*", False)[0], u'Phyrexian War Beast\n{3}\nArtifact Creature - Beast\n3/4\nWhen Phyrexian War Beast leaves the battlefield, sacrifice a land and Phyrexian War Beast deals 1 damage to you.\n1 result/s')
-        self.assertEqual(dispatch_message("Phyrexian War Beast*", "Phyrexian War Beast*", False)[0], u'Phyrexian War Beast\n{3}\nArtifact Creature - Beast\n3/4\nWhen Phyrexian War Beast leaves the battlefield, sacrifice a land and Phyrexian War Beast deals 1 damage to you.\n1 result/s')
-        self.assertEqual(dispatch_message("Phyrexian War Beast*", "!Phyrexian War Beast*", True)[0], u'*Phyrexian War Beast* {3} |Artifact Creature - Beast| 3/4 When Phyrexian War Beast leaves the battlefield, sacrifice a land and Phyrexian War Beast deals 1 damage to you.')
+        self.assertEqual(dispatch_message("!Phyrexian War Beast*", False)[0], (u'Phyrexian War Beast\n{3}\nArtifact Creature - Beast\n3/4\nWhen Phyrexian War Beast leaves the battlefield, sacrifice a land and Phyrexian War Beast deals 1 damage to you.\n1 result/s', False))
+        self.assertEqual(dispatch_message("!Phyrexian War Beast*", True)[0], (u'*Phyrexian War Beast* {3} |Artifact Creature - Beast| 3/4 When Phyrexian War Beast leaves the battlefield, sacrifice a land and Phyrexian War Beast deals 1 damage to you.', False))
 
         # Between 2 and 5 cards are found
-        self.assertTrue("5 result/s" in dispatch_message("Phyrexian R*", "!Phyrexian R*", False)[0])
-        self.assertTrue("5 result/s" in dispatch_message("Phyrexian R*", "Phyrexian R*", False)[0])
-        self.assertTrue(len(dispatch_message("Phyrexian R*", "!Phyrexian R*", True)[0]) > 50)
+        self.assertTrue("5 result/s" in dispatch_message("!Phyrexian R*", False)[0][0])
+        self.assertTrue(len(dispatch_message("!Phyrexian R*", True)[0][0]) > 50)
 
     def testGetRules(self):
         # FIX: Parsing rules queries in PM when not starting specifically with !r
-        self.assertEqual(dispatch_message("r", "!r 100.6b", False)[0], "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
-        # self.assertEqual(dispatch_message("r", "r 100.6b", False)[0], "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
-        self.assertEqual(dispatch_message("100.6b", "100.6b", False)[0], "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
-        # self.assertEqual(dispatch_message("!100.6b", "!100.6b", False)[0], "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
-        self.assertEqual(dispatch_message("r", "!r 100.6b", True)[0], "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
-        self.assertEqual(dispatch_message("r", "!r Locator", False)[0], "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
-        self.assertEqual(dispatch_message("r", "!r Locator", False)[0], "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
-        self.assertEqual(dispatch_message("r", "!r Locator", True)[0], "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
-        self.assertEqual(dispatch_message("r", "!r Fry", False)[0], "No rule/s found")
-        self.assertEqual(dispatch_message("r", "!r Fry", True)[0], "No rule/s found")
+        self.assertEqual(dispatch_message("!r 100.6b", False)[0], ("100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n", False))
+        self.assertEqual(dispatch_message("!100.6b", False)[0], ("100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n", False))
+        self.assertEqual(dispatch_message("!r 100.6b", True)[0], ("100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n", False))
+        self.assertEqual(dispatch_message("!r Locator", False)[0], ("100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n", False))
+        self.assertEqual(dispatch_message("!r Locator", True)[0], ("100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n", False))
+        self.assertEqual(dispatch_message("!r Fry", False)[0], ("No rule/s found", False))
+        self.assertEqual(dispatch_message("!r Fry", True)[0], ("No rule/s found", False))
 
     def testDoAdvancedSearch(self):
-        self.assertEqual(dispatch_message("s en:\"Island\"", "!s en:\"Island\"", False)[0], "Island\n\nBasic Land - Island\n1 result/s")
-        # FIX: Recognise advanced search in PM with no !
-        # self.assertEqual(dispatch_message("s en:\"Island\"", "s en:\"Island\"", False)[0], "Island\n\nBasic Land - Island\n\n\n1 result/s")
-        self.assertEqual(dispatch_message("s en:\"Island\"", "!s en:\"Island\"", True)[0], "*Island* |Basic Land - Island|")
-        # FIX: Single quoted strings
-        # self.assertEqual(dispatch_message("s en:'Island'", "!s en:'Island'", False)[0], "Island\n\nBasic Land - Island\n\n\n1 result/s")
-        self.assertEqual(dispatch_message("s en:Island or en:Mountain and not en:Swamp", "!s en:Island or en:Mountain and not en:Swamp", False)[0], "Island\n\nBasic Land - Island\nMountain\n\nBasic Land - Mountain\n2 result/s")
-        # self.assertEqual(dispatch_message("s en:Island or en:Mountain and not en:Swamp", "s en:Island or en:Mountain and not en:Swamp", False)[0], "Island\n\nBasic Land - Island\n\n\nMountain\n\nBasic Land - Mountain\n\n\n2 result/s")
-        self.assertEqual(dispatch_message("s en:Island or en:Mountain and not en:Swamp", "!s en:Island or en:Mountain and not en:Swamp", True)[0], "*Island* |Basic Land - Island|\n*Mountain* |Basic Land - Mountain|")
-        self.assertTrue(len(dispatch_message("s banned:vintage and legal:freeform", "!s banned:vintage and legal:freeform", False)[0]) > 50)
-        # self.assertTrue(len(dispatch_message("s banned:vintage and legal:freeform", "!s banned:vintage and legal:freeform", False)[0]) > 50)
-        self.assertEqual(dispatch_message("s banned:vintage and legal:freeform", "!s banned:vintage and legal:freeform", True)[0][0], "13 results sent to PM")
-        self.assertTrue(len(dispatch_message("s banned:vintage and legal:freeform", "!s banned:vintage and legal:freeform", True)[1][0]) > 50)
+        self.assertEqual(dispatch_message("!s en:\"Island\"", False)[0], ("Island\n\nBasic Land - Island\n1 result/s", False))
+        self.assertEqual(dispatch_message("!s en:\"Island\"", True)[0], ("*Island* |Basic Land - Island|", False))
+        self.assertEqual(dispatch_message("!s en:'Island'", False)[0], ("Island\n\nBasic Land - Island\n1 result/s", False))
+        self.assertEqual(dispatch_message("!s en:'Island'", True)[0], (u'*Island* |Basic Land - Island|', False))
+        self.assertEqual(dispatch_message("!s en:Island or en:Mountain and not en:Swamp", False)[0], ("Island\n\nBasic Land - Island\nMountain\n\nBasic Land - Mountain\n2 result/s", False))
+        self.assertEqual(dispatch_message("!s en:Island or en:Mountain and not en:Swamp", True)[0], ("*Island* |Basic Land - Island|\n*Mountain* |Basic Land - Mountain|", False))
+        self.assertTrue(len(dispatch_message("!s banned:vintage and legal:freeform", False)[0][0]) > 50)
+        self.assertEqual(dispatch_message("!s banned:vintage and legal:freeform", True)[0][0], "13 results sent to PM")
+        self.assertTrue(len(dispatch_message("!s banned:vintage and legal:freeform", True)[1][0]) > 50)
 
         # Test brackets and implicit AND
-        self.assertTrue(dispatch_message("s f:modern (n:Cryptic and t:Instant)", "!s f:modern (n:Cryptic and t:Instant)", False)[0].startswith("Cryptic Command"))
-        self.assertTrue(dispatch_message("s f:modern n:Cryptic t:Instant", "!s f:modern n:Cryptic t:Instant", False)[0].startswith("Cryptic Command"))
+        self.assertTrue(dispatch_message("!s f:modern (n:Cryptic and t:Instant)", False)[0][0].startswith("Cryptic Command"))
+        self.assertTrue(dispatch_message("!s f:modern (n:Cryptic and t:Instant)", True)[0][0].startswith("*Cryptic Command*"))
+        self.assertTrue(dispatch_message("!s f:modern n:Cryptic t:Instant", False)[0][0].startswith("Cryptic Command"))
+        self.assertTrue(dispatch_message("!s f:modern n:Cryptic t:Instant", True)[0][0].startswith("*Cryptic Command*"))
 
         # Should be failures
-        self.assertTrue(dispatch_message("s n=Island", "!s n=Island", False)[0].startswith("Unable to parse search terms"))
-        self.assertEqual(dispatch_message("s n:Fryland", "!s n:Fryland", False)[0], "No cards found")
+        self.assertTrue(dispatch_message("!s n=Island", False)[0][0].startswith("Unable to parse search terms"))
+        self.assertTrue(dispatch_message("!s n=Island", True)[0][0].startswith("Unable to parse search terms"))
+        self.assertEqual(dispatch_message("!s n:Fryland", False)[0], ("No cards found", False))
+        self.assertEqual(dispatch_message("!s n:Fryland", True)[0], ("No cards found", False))
 
     def testDoAdvancedSearchQuick(self):
-        self.assertEqual(dispatch_message("qs en:\"Island\"", "!qs en:\"Island\"", False)[0], "Island ()\n1 result/s")
-        # FIX: Recognise advanced search in PM with no !
-        # self.assertEqual(dispatch_message("s en:\"Island\"", "s en:\"Island\"", False)[0], "Island\n\nBasic Land - Island\n\n\n1 result/s")
-        self.assertEqual(dispatch_message("qs en:\"Island\"", "!qs en:\"Island\"", True)[0], "Island ()")
-        # FIX: Single quoted strings
-        # self.assertEqual(dispatch_message("s en:'Island'", "!s en:'Island'", False)[0], "Island\n\nBasic Land - Island\n\n\n1 result/s")
-        self.assertEqual(dispatch_message("qs en:Island or en:Mountain and not en:Swamp", "!qs en:Island or en:Mountain and not en:Swamp", False)[0], "Island ()\nMountain ()\n2 result/s")
-        # self.assertEqual(dispatch_message("s en:Island or en:Mountain and not en:Swamp", "s en:Island or en:Mountain and not en:Swamp", False)[0], "Island\n\nBasic Land - Island\n\n\nMountain\n\nBasic Land - Mountain\n\n\n2 result/s")
-        self.assertEqual(dispatch_message("qs en:Island or en:Mountain and not en:Swamp", "!qs en:Island or en:Mountain and not en:Swamp", True)[0], "Island ()\nMountain ()")
-        self.assertTrue(len(dispatch_message("qs banned:vintage and legal:freeform", "!qs banned:vintage and legal:freeform", False)[0]) > 50)
-        # self.assertTrue(len(dispatch_message("s banned:vintage and legal:freeform", "!s banned:vintage and legal:freeform", False)[0]) > 50)
-        self.assertEqual(dispatch_message("qs banned:vintage and legal:freeform", "!qs banned:vintage and legal:freeform", True)[0][0], "13 results sent to PM")
-        self.assertTrue(len(dispatch_message("qs banned:vintage and legal:freeform", "!qs banned:vintage and legal:freeform", True)[1][0]) > 50)
+        self.assertEqual(dispatch_message("!qs en:\"Island\"", False)[0], ("Island ()\n1 result/s", False))
+        self.assertEqual(dispatch_message("!qs en:\"Island\"", True)[0], ("Island ()", False))
+        self.assertEqual(dispatch_message("!qs en:'Island'", False)[0], ("Island ()\n1 result/s", False))
+        self.assertEqual(dispatch_message("!qs en:'Island'", True)[0], ("Island ()", False))
+        self.assertEqual(dispatch_message("!qs en:Island or en:Mountain and not en:Swamp", False)[0], ("Island ()\nMountain ()\n2 result/s", False))
+        self.assertEqual(dispatch_message("!qs en:Island or en:Mountain and not en:Swamp", True)[0], ("Island ()\nMountain ()", False))
+        self.assertTrue(len(dispatch_message("!qs banned:vintage and legal:freeform", False)[0][0]) > 50)
+        self.assertEqual(dispatch_message("!qs banned:vintage and legal:freeform", True)[0][0], "13 results sent to PM")
+        self.assertTrue(len(dispatch_message("!qs banned:vintage and legal:freeform", True)[1][0]) > 50)
 
-        self.assertTrue(dispatch_message("qs f:modern (n:Cryptic and t:Instant)", "!qs f:modern (n:Cryptic and t:Instant)", False)[0].startswith("Cryptic Command"))
-        self.assertTrue(dispatch_message("qs f:modern n:Cryptic t:Instant", "!qs f:modern n:Cryptic t:Instant", False)[0].startswith("Cryptic Command"))
+        self.assertTrue(dispatch_message("!qs f:modern (n:Cryptic and t:Instant)", False)[0][0].startswith("Cryptic Command"))
+        self.assertTrue(dispatch_message("!qs f:modern (n:Cryptic and t:Instant)", True)[0][0].startswith("Cryptic Command"))
+        self.assertTrue(dispatch_message("!qs f:modern n:Cryptic t:Instant", False)[0][0].startswith("Cryptic Command"))
+        self.assertTrue(dispatch_message("!qs f:modern n:Cryptic t:Instant", True)[0][0].startswith("Cryptic Command"))
 
         # Should be failures
-        self.assertTrue(dispatch_message("qs n=Island", "!qs n=Island", False)[0].startswith("Unable to parse search terms"))
-        self.assertEqual(dispatch_message("qs n:Fryland", "!qs n:Fryland", False)[0], "No cards found")
+        self.assertTrue(dispatch_message("!qs n=Island", False)[0][0].startswith("Unable to parse search terms"))
+        self.assertTrue(dispatch_message("!qs n=Island", True)[0][0].startswith("Unable to parse search terms"))
+        self.assertEqual(dispatch_message("!qs n:Fryland", False)[0], ("No cards found", False))
+        self.assertEqual(dispatch_message("!qs n:Fryland", True)[0], ("No cards found", False))
 
     def testGetRandomCard(self):
-        self.assertTrue(len(dispatch_message("random", "!random", False)[0]) > 5)
-        self.assertTrue(len(dispatch_message("random", "random", False)[0]) > 5)
-        self.assertTrue(len(dispatch_message("random", "!random", True)[0]) > 5)
+        self.assertTrue(len(dispatch_message("!random", False)[0][0]) > 5)
+        self.assertTrue(len(dispatch_message("!random", True)[0][0]) > 5)
 
     def testPrintSets(self):
-        self.assertTrue(len(dispatch_message("printsets", "!printsets", False)[0]) > 5)
-        self.assertTrue(len(dispatch_message("printsets", "printsets", False)[0]) > 5)
-        self.assertTrue(len(dispatch_message("printsets", "!printsets", True)[0]) > 5)
+        self.assertTrue(len(dispatch_message("!printsets", False)[0][0]) > 5)
+        self.assertTrue(len(dispatch_message("!printsets", True)[0][0]) > 5)
 
     def testPrintSetsInOrder(self):
-        self.assertTrue(len(dispatch_message("printsetsinorder", "!printsetsinorder", False)[0]) > 5)
-        self.assertTrue(len(dispatch_message("printsetsinorder", "printsetsinorder", False)[0]) > 5)
-        self.assertTrue(len(dispatch_message("printsetsinorder", "!printsetsinorder", True)[0]) > 5)
+        self.assertTrue(len(dispatch_message("!printsetsinorder", False)[0][0]) > 5)
+        self.assertTrue(len(dispatch_message("!printsetsinorder", True)[0][0]) > 5)
 
 
 if __name__ == '__main__':
