@@ -1,9 +1,12 @@
 #!/usr/bin/python2.7
 # -*- coding: utf-8 -*-
-import unittest, sys, logging, time
+import unittest, sys, logging, time, random
 import pysqlite2.dbapi2 as sqlite
-from judgebot import dispatch_message, handle_private_message
+from judgebot import dispatch_message
 from frytherer import *
+
+word_file = "/usr/share/dict/words"
+WORDS = open(word_file).read().splitlines()
 
 try:
     conn = sqlite.connect('frytherer.db', check_same_thread=False)
@@ -21,16 +24,42 @@ for rule in rules:
     x = rule.split('. ')
     all_rules[x[0]] = ". ".join(x[1:])
 
+def giveRandomWords(number):
+    ret = ""
+    for i in xrange(number):
+        ret += random.choice(WORDS) + " "
+    return ret.rstrip()
 
-def tryStartsWith(command, expected):
-    return (dispatch_message(command, False)[0][0].startswith(expected) and
-            dispatch_message("Some Words Before " + command, False)[0][0].startswith(expected) and
-            dispatch_message(command + " Some Words After", False)[0][0].startswith(expected) and
-            dispatch_message("Some Words Before " + command + " Some Words After", False)[0][0].startswith(expected) and
-            dispatch_message(command, True)[0][0].startswith(expected) and
-            dispatch_message("Some Words Before " + command, True)[0][0].startswith(expected) and
-            dispatch_message(command + " Some Words After", True)[0][0].startswith(expected) and
-            dispatch_message("Some Words Before " + command + " Some Words After", True)[0][0].startswith(expected))
+sentinel = object()
+def tryStartsWith(command, expected, publicExpected=sentinel, alone=False):
+    if publicExpected is sentinel:
+        publicExpected = expected
+    if alone:
+        return dispatch_message(command, False)[0][0].startswith(expected)
+    else:
+        return (dispatch_message(command, False)[0][0].startswith(expected) and
+               dispatch_message(giveRandomWords(3) + " " + command, False)[0][0].startswith(expected) and
+               dispatch_message(command + " " + giveRandomWords(3), False)[0][0].startswith(expected) and
+               dispatch_message(giveRandomWords(3) + " " + command + " " + giveRandomWords(3), False)[0][0].startswith(expected) and
+               dispatch_message(command, True)[0][0].startswith(publicExpected) and
+               dispatch_message(giveRandomWords(3) + " " + command, True)[0][0].startswith(publicExpected) and
+               dispatch_message(command + " " + giveRandomWords(3), True)[0][0].startswith(publicExpected) and
+               dispatch_message(giveRandomWords(3) + " " + command + " " + giveRandomWords(3), True)[0][0].startswith(publicExpected))
+
+def tryEquals(command, expected, publicExpected=sentinel, alone=False):
+    if publicExpected is sentinel:
+        publicExpected = expected
+    if alone:
+        return dispatch_message(command, False)[0] == expected
+    else:
+        return (dispatch_message(command, False)[0] == expected and
+               dispatch_message(giveRandomWords(3) + " " + command, False)[0] == expected and
+               dispatch_message(command + " " + giveRandomWords(3), False)[0] == expected and
+               dispatch_message(giveRandomWords(3) + " " + command + " " + giveRandomWords(3), False)[0] == expected and
+               dispatch_message(command, True)[0] == publicExpected and
+               dispatch_message(giveRandomWords(3) + " " + command, True)[0] == publicExpected and
+               dispatch_message(command + " " + giveRandomWords(3), True)[0] == publicExpected and
+               dispatch_message(giveRandomWords(3) + " " + command + " " + giveRandomWords(3), True)[0] == publicExpected)
 
 
 class FrythererTestCases(unittest.TestCase):
@@ -145,41 +174,38 @@ class BotTestCases(unittest.TestCase):
             self.assertTrue(tryStartsWith(doc, "http://"))
         for doc in ["!url amtr 1.13", "!amtr 1.13", "!mtr 1.13", "!ipg 1.10"]:
             self.assertTrue(tryStartsWith(doc, "Invalid section requested"))
-        for doc in ["mtr", "ipg", "jar", "peip", "cr", "alldocs", "pptq", "rptq", "aipg", "amtr", "mt", "l@ec", "hce", "mpe", "grv", "ftmgs", "tardiness", "oa", "slow play", "insufficient shuffling", "ddlp", "lpv", "cpv", "mc", "usc minor", "usc major", "idaw", "bribery", "ab", "totm", "stalling", "cheating", "amtr 4.2", "aipg 4.2", "amtr appendix a", "aipg appendix a"]:
-            self.assertTrue(tryStartsWith(doc, "http://"))
+        for doc in ["mtr", "ipg", "jar", "peip", "alldocs", "pptq", "rptq", "aipg", "amtr", "amtr 4.2", "aipg 4.2", "amtr appendix a", "aipg appendix a"]:
+            self.assertTrue(tryStartsWith("!"+doc, "http://"))
+        for doc in ["mt", "l@ec", "hce", "mpe", "grv", "ftmgs", "tardiness", "oa", "slow play", "insufficient shuffling", "ddlp", "lpv", "cpv", "mc", "usc minor", "usc major", "idaw", "bribery", "ab", "totm", "stalling", "cheating"]:
+            self.assertTrue(tryStartsWith("!"+doc, "http://", alone=True))
         for doc in ["abc", "aipg appendix z", "amtr appendix z", "aipg 100.1", "aipg 100", "amtr 100.1", "amtr 100"]:
             self.assertFalse(tryStartsWith("!url " + doc, "http://"))
-        self.assertEqual(dispatch_message("!url mtr 1.10", False)[0], ("http://blogs.magicjudges.org/rules/mtr1-10/", False))
-        self.assertEqual(dispatch_message("!url mtr 1.10", True)[0], ("http://blogs.magicjudges.org/rules/mtr1-10/", False))
-        self.assertEqual(dispatch_message("!url mtr 1.1", False)[0], ("http://blogs.magicjudges.org/rules/mtr1-1/", False))
-        self.assertEqual(dispatch_message("!url mtr 1.1", True)[0], ("http://blogs.magicjudges.org/rules/mtr1-1/", False))
+        self.assertTrue(tryEquals("!url mtr 1.10", ("http://blogs.magicjudges.org/rules/mtr1-10/", False)))
+        self.assertTrue(tryEquals("!url mtr 1.1", ("http://blogs.magicjudges.org/rules/mtr1-1/", False)))
 
     def testGetCard(self):
         # Single card that exists (single word)
-        self.assertEqual(dispatch_message("!island", False)[0], ("Island\n\nBasic Land - Island", False))
-        self.assertEqual(dispatch_message("!island", True)[0], ("*Island* |Basic Land - Island|", False))
+        self.assertTrue(tryEquals("!island", ("Island\n\nBasic Land - Island", False), publicExpected=("*Island* |Basic Land - Island|", False)))
 
         # Single card that doesn't exist (single word)
-        self.assertEqual(dispatch_message("!fryland", False)[0], ("", False))
-        self.assertEqual(dispatch_message("!fryland", True)[0], ("", False))
+        self.assertTrue(tryEquals("!fryland", ("", False)))
 
         # Weird formatting
         # FIX: To use fast search
-        self.assertEqual(dispatch_message("!\"island\"", False)[0], ("Island\n\nBasic Land - Island", False))
-        self.assertEqual(dispatch_message("!\"island\"", True)[0], ("*Island* |Basic Land - Island|", False))
-        self.assertEqual(dispatch_message("!'island'", False)[0], ("Island\n\nBasic Land - Island", False))
-        self.assertEqual(dispatch_message("!'island'", True)[0], ("*Island* |Basic Land - Island|", False))
+        self.assertTrue(tryEquals("!\"island\"", ("Island\n\nBasic Land - Island", False), publicExpected=("*Island* |Basic Land - Island|", False)))
+        self.assertTrue(tryEquals("!'island'", ("Island\n\nBasic Land - Island", False), publicExpected=("*Island* |Basic Land - Island|", False)))
 
         # Single card that exists (multiple word)
-        self.assertTrue(dispatch_message("!privileged position", False)[0][0].startswith("Privileged Position"))
-        self.assertTrue(dispatch_message("!privileged position", True)[0][0].startswith("*Privileged Position"))
+        self.assertTrue(tryStartsWith("!privileged position", "Privileged Position", publicExpected="*Privileged Position*"))
 
         # Single card that doesn't exist (multiple word)
-        self.assertEqual(dispatch_message("!frycanic fryland", False)[0], ("", False))
-        self.assertEqual(dispatch_message("!frycanic fryland", True)[0], ("", False))
+        self.assertTrue(tryEquals("!frycanic fryland", ("", False)))
+
+        # Single card that starts with the name of another card
+        self.assertTrue(tryStartsWith("!forest bear", "Forest Bear", publicExpected="*Forest Bear*"))
 
         # # Multiple cards that exist (single word) -- <= five
-        # self.assertEqual(dispatch_message("island !mountain !swamp !plains !forest", "!island !mountain !swamp !plains !forest", False)[0], u'Forest\n\nBasic Land - Forest\nIsland\n\nBasic Land - Island\nMountain\n\nBasic Land - Mountain\nPlains\n\nBasic Land - Plains\nSwamp\n\nBasic Land - Swamp')
+        #self.assertTrue(tryEquals("!island !mountain !swamp !plains !forest", [(u'Island\n\nBasic Land - Island', False), (u'Mountain\n\nBasic Land - Mountain', False), (u'Swamp\n\nBasic Land - Swamp', False), (u'Plains\n\nBasic Land - Plains', False), (u'Forest\n\nBasic Land - Forest', False)]))
         # self.assertTrue(len(dispatch_message("island !mountain !swamp !plains !forest", "island !mountain !swamp !plains !forest", False)[0]) > 50, u'Forest\n\nBasic Land - Forest\n\n\nIsland\n\nBasic Land - Island\n\n\nMountain\n\nBasic Land - Mountain\n\n\nPlains\n\nBasic Land - Plains\n\n\nSwamp\n\nBasic Land - Swamp\n\n')
         # self.assertEqual(dispatch_message("island !mountain !swamp !plains !forest", "!island !mountain !swamp !plains !forest", True)[0], u'*Forest* |Basic Land - Forest|\n*Island* |Basic Land - Island|\n*Mountain* |Basic Land - Mountain|\n*Plains* |Basic Land - Plains|\n*Swamp* |Basic Land - Swamp|')
 
@@ -274,6 +300,10 @@ class BotTestCases(unittest.TestCase):
         self.assertTrue(dispatch_message("!qs n=Island", True)[0][0].startswith("Unable to parse search terms"))
         self.assertEqual(dispatch_message("!qs n:Fryland", False)[0], ("No cards found", False))
         self.assertEqual(dispatch_message("!qs n:Fryland", True)[0], ("No cards found", False))
+
+    def testRulings(self):
+        #self.assertTrue()
+        pass
 
     def testGetRandomCard(self):
         self.assertTrue(len(dispatch_message("!random", False)[0][0]) > 5)

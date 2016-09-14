@@ -21,6 +21,7 @@ except ImportError:
 from itertools import chain, izip, repeat, islice
 from threading import RLock
 from cachetools import cached, LRUCache, hashkey
+from fuzzywuzzy import process, fuzz
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -42,7 +43,7 @@ except sqlite.OperationalError:  # pragma: no cover
 
 # Check if the database actually has stuff
 try:
-    c.execute('SELECT DISTINCT(name) FROM cards')
+    c.execute('SELECT DISTINCT(name) FROM cards ORDER BY name')
     allCardNames = [y[0].lower() for y in c.fetchall()]
     numCards = len(allCardNames)
     logging.debug("Found %d cards" % numCards)
@@ -137,6 +138,7 @@ def dispatch_message(incomingMessage, fromChannel):
     logging.debug("Command list: {}".format(command_list))
     ret = []
     for message in command_list:
+        message = message.rstrip()
         if re.match(single_quoted_word, message):
             logging.debug("Single quoted word detected, stripping")
             message = message[1:-1]
@@ -145,7 +147,7 @@ def dispatch_message(incomingMessage, fromChannel):
             ret.append((help(), True))
         elif message == "helpsearch" or message_words[0] == "helpsearch":
             ret.append((helpsearch(), True))
-        elif message[0:4] in ["url ", "mtr ", "ipg ", "mtr", "ipg", "amtr", "aipg"]:
+        elif message in ["alldocs", "mt", "missed trigger", "l@ec", "looking at extra cards", "hce", "hidden card error", "mpe", "mulligan procedure error", "grv", "game rule violation", "ftmgs", "failure to maintain game state", "tardiness", "oa", "outside assistance", "slow play", "insufficient shuffling", "ddlp", "deck/decklist problem", "lpv", "limited procedure violation", "cpv", "communication policy violation", "mc", "marked cards", "usc minor", "usc major", "idaw", "improperly determining a winner", "bribery", "ab", "aggressive behaviour", "totm", "theft of tournament material", "stalling", "cheating"] or message.startswith("alldocs ") or message[0:4] in ["url ", "mtr ", "ipg ", "mtr", "ipg", "amtr", "aipg", "jar", "jar ", "peip", "pptq", "rptq"]:
             ret.append((url(message), False))
         elif message.startswith("printsets"):
             c.execute('SELECT DISTINCT(name), code, releaseDate FROM sets ORDER BY ' + ('releaseDate' if message.endswith("inorder") else 'name') + ' ASC')
@@ -248,12 +250,9 @@ def dispatch_message(incomingMessage, fromChannel):
                 logging.debug("We do!")
                 cards = cardSearch(c, ['en:' + message])
                 ret.append((printCard(c, cards[0], quick=False, slackChannel=fromChannel), False))
+                continue
             logging.debug("We don't")
-            # Handle !card1 !card2
-            # Handle !card1&!card2
-            # Handle Blah !card1 blah !card2
-            # Don't forget if it's a PM we'll have stripped the possible initial ! so let's
-            # use the raw message
+
             # TODO: Do it backwards, so longest matches are better
             # command_list = bot_command_regex.findall(message)
             # logging.debug("Command list: {}".format(command_list))
@@ -263,24 +262,28 @@ def dispatch_message(incomingMessage, fromChannel):
             #         logging.debug("Bailing early due to exact match")
             #         cards_found.append('en:"%s"' % card)
             #         continue
-                # card_tokens = re.split(' |&', message[message.find(card):])
-                # logging.debug("Tokenising: {}".format(card_tokens))
-                # backup = []
-                # real = False
-                # for i in xrange(1, len(card_tokens) + 1):
-                #     card_name = " ".join(card_tokens[:i])
-                #     if card_tokens[i - 1].startswith("!"):
-                #         break
-                #     if not backup:
-                #         backup.extend([x for x in allCardNames if difflib.SequenceMatcher(None, x.split(", ")[0].lower(), card_name.lower()).ratio() >= 0.8])
-                #     real = difflib.get_close_matches(card_name, allCardNames, cutoff=0.8)
-                #     if len(real):
-                #         cards_found.append('en:"%s"' % real[0])
-                #         real = True
-                #         break
-                # if not real:
-                #     if backup:
-                #         cards_found.append('en:"%s"' % backup[0])
+            card_tokens = re.split(' |&', message)
+            logging.debug("Tokenising: {}".format(card_tokens))
+            backup = []
+            real = False
+            for i in xrange(len(card_tokens), 0, -1):
+                card_name = " ".join(card_tokens[:i])
+                print card_name
+                if card_tokens[i - 1].startswith("!"):
+                    break
+                if not backup:
+                    #backup.extend([x for x in allCardNames if difflib.SequenceMatcher(None, x.split(", ")[0].lower(), card_name.lower()).ratio() >= 0.8])
+                    print backup
+                #real = difflib.get_close_matches(card_name, allCardNames, cutoff=0.8)
+                real = process.extractOne(card_name, allCardNames, scorer=fuzz.ratio)
+                print real
+                if real[1] >= 80:
+                    cards_found.append('en:"%s"' % real[0])
+                    real = True
+                    break
+            if not real:
+                if backup:
+                    cards_found.append('en:"%s"' % backup[0])
             logging.debug("Finally, the cards: {}".format(cards_found))
             if cards_found:
                 terms = list(intersperse("OR", cards_found))
@@ -297,6 +300,7 @@ def dispatch_message(incomingMessage, fromChannel):
                 logging.debug("I didn't understand the command")
                 ret.append(("", False))
     logging.debug("--- Done ---")
+    logging.debug(ret)
     return ret
 
 

@@ -12,6 +12,7 @@ except ImportError:
     import re
 import logging
 logging.basicConfig(level=logging.DEBUG)
+from fuzzywuzzy import process
 
 mana_regexp = re.compile('([0-9]*)(b*)(g*)(r*)(u*)(w*)')
 section_regexp = re.compile('a{0,1}(ipg|mtr) (?:(appendix [a-z])|(\d+)(?:(?:\.)(\d{1,2})){0,1})')
