@@ -12,7 +12,6 @@ except ImportError:
     import re
 import logging
 logging.basicConfig(level=logging.DEBUG)
-from fuzzywuzzy import process
 
 mana_regexp = re.compile('([0-9]*)(b*)(g*)(r*)(u*)(w*)')
 section_regexp = re.compile('a{0,1}(ipg|mtr) (?:(appendix [a-z])|(\d+)(?:(?:\.)(\d{1,2})){0,1})')
@@ -26,7 +25,7 @@ def gathererCapitalise(y):
     INPUT: Regular card name in whatever case
     OUTPUT: Magic style capitalised card name
     """
-    words = y.split(" ")
+    words = y.split()
     ret_string = []
     for x in words:
         x = x.replace(u'\u2019', '\'').replace(u'\u2018', '\'').replace('`', '\'')
@@ -238,7 +237,7 @@ def cardSearch(cursor, terms):
                 elif term[3:] == "timeshifted":
                     sql_query += "(rarity = 'Special' AND printings LIKE '%Timeshifted%')"
                 elif term[3:] == "funny":
-                    sql_query += "(printings LIKE '%Happy Holidays%' OR printings LIKE '%Unglued%' or printings LIKE '%Unhinged%')"
+                    sql_query += "(printings LIKE '%HHO%' OR printings LIKE '%UGL%' or printings LIKE '%UNH%')"
                 elif term[3:] == "promo":
                     sql_query += "(source != '' AND source NOT LIKE '%Theme%')"
                 elif term[3:] == "permanent":
@@ -506,6 +505,9 @@ def ruleSearch(all_rules, rule_to_search):
     if all_rules == {}:
         return "Rules search not available"
     if rule_to_search in all_rules:
+        if "." not in rule_to_search and rule_to_search+".1" in all_rules:
+            # Give them back the one after the heading too
+            return [rule_to_search + ": " + all_rules[rule_to_search], rule_to_search+".1" + ": " + all_rules[rule_to_search+".1"]]
         return (rule_to_search + ": " + all_rules[rule_to_search])
     else:
         rules_list = [(x, y) for (x, y) in all_rules.items() if re.search(rule_to_search, y, re.I)]
@@ -610,7 +612,7 @@ def url(document):
     if document.startswith("url "):
         document = document[4:]
         logging.debug("Formatting: {}".format(document))
-    doc_words = document.split(" ")
+    doc_words = document.split()
     ret = ""
 
     if doc_words[0] == "jar":
@@ -677,7 +679,7 @@ def url(document):
             logging.debug("Doco: {} Appendix: {} Main: {} Sub: {}".format(doco, appendix, main, sub))
             if doco == "ipg":
                 if appendix:
-                    (app, letter) = appendix.split(" ")
+                    (app, letter) = appendix.split(None, 2)
                     if (letter != "a" and letter != "b"):
                         ret = "Invalid section requested"
                     else:
@@ -702,7 +704,7 @@ def url(document):
                     ret = "Invalid section requested"
             elif doco == "mtr":
                 if appendix:
-                    (app, letter) = appendix.split(" ")
+                    (app, letter) = appendix.split()
                     if(letter != "a" and letter != "b" and letter != "c" and letter != "d" and letter != "e" and letter != "f"):
                         ret = "Invalid section requested"
                     else:

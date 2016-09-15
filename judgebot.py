@@ -5,7 +5,7 @@
 A Slackbot that handles requests for Oracle text,
 Comprehensive Rules and other such useful garbage
 """
-import random, sys, difflib
+import random, sys
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
 from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url
@@ -43,13 +43,16 @@ except sqlite.OperationalError:  # pragma: no cover
 
 # Check if the database actually has stuff
 try:
-    c.execute('SELECT DISTINCT(name) FROM cards ORDER BY name')
+    c.execute('SELECT DISTINCT(name) FROM cards WHERE layout NOT IN ("token", "vanguard", "plane", "phenomenon", "scheme") ORDER BY name')
     allCardNames = [y[0].lower() for y in c.fetchall()]
     numCards = len(allCardNames)
     logging.debug("Found %d cards" % numCards)
 except sqlite.OperationalError:  # pragma: no cover
     logging.error("No cards in DB? Try running dbimport.py")
     sys.exit(1)
+
+c.execute('SELECT DISTINCT(name) FROM cards WHERE type LIKE ?', ['%Legendary%'])
+allLegendaries = [y[0].lower() for y in c.fetchall()]
 
 try:
     logging.debug("Opening CR file")
@@ -96,8 +99,9 @@ def intersperse(delimiter, seq):  # pragma: no cover
     return islice(chain.from_iterable(izip(repeat(delimiter), seq)), 1, None)
 
 rule_regexp = re.compile('!{0,1}(?:\d)+\.(?:.*)')
-bot_command_regex = re.compile('!([^!|&]+)')
+bot_command_regex = re.compile('[!&]([^!&]+)')
 single_quoted_word = re.compile('^(?:\"|\')\w+(?:\"|\')$')
+split_card_regex = re.compile('(.*?)\s*//\s*(.*)')
 
 
 def validate_colon_mode(s, loc, tokens):
@@ -133,19 +137,30 @@ def dispatch_message(incomingMessage, fromChannel):
     OUTPUT: List of tuple of (reply_message, pm_override)
     OUTPUT: pm_override is TRUE if the reply should go through PM regardless
     """
-    logging.debug("Dispatching message: {}".format(incomingMessage))
+    logging.debug("Dispatching message: {} (Channel: {})".format(incomingMessage, fromChannel))
     command_list = bot_command_regex.findall(incomingMessage)
     logging.debug("Command list: {}".format(command_list))
     ret = []
-    for message in command_list:
-        message = message.rstrip()
+    for (idx, message) in enumerate(command_list):
+        card_tokens = re.split(' ', message[0:35])
+        card_tokens = filter(lambda x: x != '', card_tokens)
+        logging.debug("Tokenising: {}".format(card_tokens))
+        # Try something iffy
+        if message.startswith("! ") or message.startswith("  ") or (message.startswith(" ") and len(card_tokens) > 1):
+            continue
+        if split_card_regex.match(message):
+            # Process the left word, slip the right one into the command list
+            (left, right) = split_card_regex.match(message).groups()
+            message = left
+            command_list.insert(idx + 1, right)
+        message = message.strip()
         if re.match(single_quoted_word, message):
             logging.debug("Single quoted word detected, stripping")
             message = message[1:-1]
-        message_words = message.split(" ")
+        message_words = message.split()
         if message == "help" or message_words[0] == "help":
             ret.append((help(), True))
-        elif message == "helpsearch" or message_words[0] == "helpsearch":
+        elif message_words[0] == "helpsearch":
             ret.append((helpsearch(), True))
         elif message in ["alldocs", "mt", "missed trigger", "l@ec", "looking at extra cards", "hce", "hidden card error", "mpe", "mulligan procedure error", "grv", "game rule violation", "ftmgs", "failure to maintain game state", "tardiness", "oa", "outside assistance", "slow play", "insufficient shuffling", "ddlp", "deck/decklist problem", "lpv", "limited procedure violation", "cpv", "communication policy violation", "mc", "marked cards", "usc minor", "usc major", "idaw", "improperly determining a winner", "bribery", "ab", "aggressive behaviour", "totm", "theft of tournament material", "stalling", "cheating"] or message.startswith("alldocs ") or message[0:4] in ["url ", "mtr ", "ipg ", "mtr", "ipg", "amtr", "aipg", "jar", "jar ", "peip", "pptq", "rptq"]:
             ret.append((url(message), False))
@@ -155,17 +170,19 @@ def dispatch_message(incomingMessage, fromChannel):
             for name, code, date in [(x[0], x[1], x[2]) for x in c.fetchall()]:
                 message_out += name + " (" + code + ")" + " [" + date + "]" + "\n"
             ret.append((message_out, True))
-        elif message == "random":
+        elif message_words[0] == "random":
             cards = cardSearch(c, ['en:' + random.choice(allCardNames)])
             if not cards:
                 return ("No cards found :(", False)
             ret.append((printCard(c, cards[0], quick=False, slackChannel=fromChannel), False))
-        elif message.endswith("extend"):
+        elif len(message_words) > 1 and message_words[1] == "extend":
             cards = cardSearch(c, ['en:' + message[:-6].rstrip()])
             if not cards:
                 return ("", False)
             ret.append((printCard(c, cards[0], extend=2, quick=False), True))
-        elif message.endswith("*"):
+        elif message_words[0].endswith("*") or message.endswith("*"):
+            if message_words[0].endswith("*"):
+                message = message_words[0]
             cards = cardSearch(c, ['n:' + message[:-1]])
             if not cards:
                 ret.append(("", False))
@@ -238,11 +255,17 @@ def dispatch_message(incomingMessage, fromChannel):
                     ret.extend([("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=True, slackChannel=fromChannel) for card in cards]), True)])
             else:
                 ret.append(("\n".join([printCard(c, card, quick=quick, slackChannel=fromChannel) for card in cards] + ["{} result/s".format(len(cards))]), False))
-        elif message.startswith("r ") or rule_regexp.match(message):
+        elif message.startswith("r ") or message.startswith("rule ") or rule_regexp.match(message):
             logging.debug("Rules query!")
             if message.startswith("r "):
                 message = message[2:]
-            ret.append((ruleSearch(all_rules, message), False))
+            elif message.startswith("rule "):
+                message = message[5:]
+            rs = ruleSearch(all_rules, message)
+            if type(rs) is not list:
+                rs = [rs]
+            for r in rs:
+                ret.append((r, False))
         else:
             logging.debug("Trying to figure out card name")
             logging.debug("Maybe we get extremely lucky")
@@ -252,38 +275,49 @@ def dispatch_message(incomingMessage, fromChannel):
                 ret.append((printCard(c, cards[0], quick=False, slackChannel=fromChannel), False))
                 continue
             logging.debug("We don't")
-
-            # TODO: Do it backwards, so longest matches are better
-            # command_list = bot_command_regex.findall(message)
-            # logging.debug("Command list: {}".format(command_list))
             cards_found = []
-            # for card in command_list:
-            #     if card in allCardNames:
-            #         logging.debug("Bailing early due to exact match")
-            #         cards_found.append('en:"%s"' % card)
-            #         continue
-            card_tokens = re.split(' |&', message)
-            logging.debug("Tokenising: {}".format(card_tokens))
-            backup = []
             real = False
             for i in xrange(len(card_tokens), 0, -1):
                 card_name = " ".join(card_tokens[:i])
                 print card_name
+                if len(card_name) < 3:
+                    logging.debug("Skipping due to being too short")
+                    continue
                 if card_tokens[i - 1].startswith("!"):
                     break
-                if not backup:
-                    #backup.extend([x for x in allCardNames if difflib.SequenceMatcher(None, x.split(", ")[0].lower(), card_name.lower()).ratio() >= 0.8])
-                    print backup
-                #real = difflib.get_close_matches(card_name, allCardNames, cutoff=0.8)
-                real = process.extractOne(card_name, allCardNames, scorer=fuzz.ratio)
-                print real
-                if real[1] >= 80:
-                    cards_found.append('en:"%s"' % real[0])
+                realCard = process.extractOne(card_name, allCardNames, scorer=fuzz.ratio)
+                print realCard
+                if realCard[1] > 80:
+                    cards_found.append('en:"%s"' % realCard[0])
                     real = True
                     break
             if not real:
-                if backup:
-                    cards_found.append('en:"%s"' % backup[0])
+                # No matches? Try a single word legendary
+                if len(card_tokens[0]) > 4:
+                    for backup_card_name in [message, card_tokens[0]]:
+                        backup1 = process.extractOne(backup_card_name, allLegendaries, scorer=fuzz.token_set_ratio)
+                        backup2 = [x for x in allCardNames if x.startswith(backup_card_name)]
+                        backup3 = [x for x in allCardNames if fuzz.ratio(x[:len(backup_card_name)], backup_card_name) > 90]
+                        logging.debug("FOUND BACKUP1: {} BACKUP2: {} BACKUP3: {}".format(backup1, backup2, backup3))
+                        if len(backup3) == 1:
+                            cards_found.append('en:"%s"' % backup3[0])
+                            break
+                        elif len(backup2) == 1:
+                            cards_found.append('en:"%s"' % backup2[0])
+                            break
+                        elif backup1 and backup1[1] >= 85:
+                            cards_found.append('en:"%s"' % backup1[0])
+                            break
+                        elif backup2:
+                            # ultimate last resort, pick the option with the comma
+                            v = filter(lambda x: ',' in x, backup2)
+                            if len(v) == 1:
+                                cards_found.append('en:"%s"' % v[0])
+                                break
+                            else:
+                                # super mega ultimate last resort, pick the longest one :D
+                                cards_found.append('en:"%s"' % max(backup2, key=len))
+                                break
             logging.debug("Finally, the cards: {}".format(cards_found))
             if cards_found:
                 terms = list(intersperse("OR", cards_found))

@@ -4,6 +4,8 @@ import unittest, sys, logging, time, random
 import pysqlite2.dbapi2 as sqlite
 from judgebot import dispatch_message
 from frytherer import *
+from fuzzywuzzy import fuzz
+
 
 word_file = "/usr/share/dict/words"
 WORDS = open(word_file).read().splitlines()
@@ -150,15 +152,16 @@ class FrythererTestCases(unittest.TestCase):
         self.assertEqual(ruleSearch(self.all_rules, "100.6b"), "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
         self.assertEqual(ruleSearch(self.all_rules, "Locator"), "100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n")
         self.assertEqual(ruleSearch(self.all_rules, "Fry"), "No rule/s found")
+        self.assertTrue(type(ruleSearch(self.all_rules, "116")) is list)
 
 
 class BotTestCases(unittest.TestCase):
-    def setUp(self):
-        self.startTime = time.time()
+    #def setUp(self):
+    #    self.startTime = time.time()
 
-    def tearDown(self):
-        t = time.time() - self.startTime
-        print "%s: %.3f" % (self.id(), t)
+    #def tearDown(self):
+    #   t = time.time() - self.startTime
+    #    print "%s: %.3f" % (self.id(), t)
         # Shit should be fast
         # self.assertTrue(t < 1)
 
@@ -205,7 +208,7 @@ class BotTestCases(unittest.TestCase):
         self.assertTrue(tryStartsWith("!forest bear", "Forest Bear", publicExpected="*Forest Bear*"))
 
         # # Multiple cards that exist (single word) -- <= five
-        #self.assertTrue(tryEquals("!island !mountain !swamp !plains !forest", [(u'Island\n\nBasic Land - Island', False), (u'Mountain\n\nBasic Land - Mountain', False), (u'Swamp\n\nBasic Land - Swamp', False), (u'Plains\n\nBasic Land - Plains', False), (u'Forest\n\nBasic Land - Forest', False)]))
+        self.assertTrue(tryEquals("!island !mountain !swamp !plains !forest", (u'Island\n\nBasic Land - Island', False), publicExpected=(u'*Island* |Basic Land - Island|', False)))
         # self.assertTrue(len(dispatch_message("island !mountain !swamp !plains !forest", "island !mountain !swamp !plains !forest", False)[0]) > 50, u'Forest\n\nBasic Land - Forest\n\n\nIsland\n\nBasic Land - Island\n\n\nMountain\n\nBasic Land - Mountain\n\n\nPlains\n\nBasic Land - Plains\n\n\nSwamp\n\nBasic Land - Swamp\n\n')
         # self.assertEqual(dispatch_message("island !mountain !swamp !plains !forest", "!island !mountain !swamp !plains !forest", True)[0], u'*Forest* |Basic Land - Forest|\n*Island* |Basic Land - Island|\n*Mountain* |Basic Land - Mountain|\n*Plains* |Basic Land - Plains|\n*Swamp* |Basic Land - Swamp|')
 
@@ -215,20 +218,21 @@ class BotTestCases(unittest.TestCase):
         # self.assertTrue(len(dispatch_message("island !mountain !swamp !plains !forest !Gigantoplasm", "!island !mountain !swamp !plains !forest !Gigantoplasm", False)[0]) > 50)
         # self.assertTrue(len(dispatch_message("island !mountain !swamp !plains !forest !Gigantoplasm", "island !mountain !swamp !plains !forest !Gigantoplasm", False)[0]) > 50)
 
+    def testSplitCards(self):
+        self.assertTrue(tryEquals("!fire//ice", (u'Fire\n(Part of Fire // Ice)\n{1}{R}\nInstant\nFire deals 2 damage divided as you choose among one or two target creatures and/or players.', False), publicExpected=(u'*Fire* (Part of Fire // Ice) {1}{R} |Instant| Fire deals 2 damage divided as you choose among one or two target creatures and/or players.', False)))
+
     def testSentences(self):
-        pass
+        self.assertTrue(tryEquals("!exquisite blood !sanguine blood", (u'Exquisite Blood\n{4}{B}\nEnchantment\nWhenever an opponent loses life, you gain that much life.', False), publicExpected=(u'*Exquisite Blood* {4}{B} |Enchantment| Whenever an opponent loses life, you gain that much life.', False)))
+        self.assertTrue(tryEquals("!exquisite blood&!sanguine blood", (u'Exquisite Blood\n{4}{B}\nEnchantment\nWhenever an opponent loses life, you gain that much life.', False), publicExpected=(u'*Exquisite Blood* {4}{B} |Enchantment| Whenever an opponent loses life, you gain that much life.', False)))
+        self.assertTrue(tryEquals("!exquisite blood&sanguine blood", (u'Exquisite Blood\n{4}{B}\nEnchantment\nWhenever an opponent loses life, you gain that much life.', False), publicExpected=(u'*Exquisite Blood* {4}{B} |Enchantment| Whenever an opponent loses life, you gain that much life.', False)))
 
     def testGetCardExtend(self):
-        self.assertTrue(len(dispatch_message("!island extend", False)[0][0]) > 50)
-        self.assertTrue(len(dispatch_message("!island extend", True)[0][0]) > 50)
-        self.assertEqual(dispatch_message("!fryland extend", False)[0], "")
-        self.assertEqual(dispatch_message("!fryland extend", True)[0], "")
+        self.assertTrue(tryStartsWith("!island extend", "Island", alone=True))
+        self.assertTrue(tryEquals("!fryland extend", "", alone=True))
 
     def testGetCardStar(self):
         # Cards are found
-        self.assertTrue(len(dispatch_message("!island*", False)[0][0]) > 50)
-        self.assertEqual(dispatch_message("!island*", True)[0][0], "9 results sent to PM")
-        self.assertTrue(len(dispatch_message("!island*", True)[1][0]) > 50)
+        self.assertTrue(tryStartsWith("!island*", "Island", publicExpected="9 results"))
 
         # Cards aren't found
         self.assertEqual(dispatch_message("!fryland*", False)[0], ("", False))
@@ -255,6 +259,8 @@ class BotTestCases(unittest.TestCase):
         self.assertEqual(dispatch_message("!r Locator", True)[0], ("100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n", False))
         self.assertEqual(dispatch_message("!r Fry", False)[0], ("No rule/s found", False))
         self.assertEqual(dispatch_message("!r Fry", True)[0], ("No rule/s found", False))
+        self.assertEqual(dispatch_message("!rule 100.6b", False)[0], ("100.6b: Players can use the Magic Store & Event Locator at Wizards.com/Locator to find tournaments in their area.\n", False))
+        self.assertEqual(dispatch_message("!rule 116", False)[0], ("116: Timing and Priority\n", False))
 
     def testDoAdvancedSearch(self):
         self.assertEqual(dispatch_message("!s en:\"Island\"", False)[0], ("Island\n\nBasic Land - Island\n1 result/s", False))
@@ -303,7 +309,10 @@ class BotTestCases(unittest.TestCase):
 
     def testRulings(self):
         #self.assertTrue()
-        pass
+        return
+
+    def testFlavour(self):
+        return
 
     def testGetRandomCard(self):
         self.assertTrue(len(dispatch_message("!random", False)[0][0]) > 5)
@@ -317,6 +326,35 @@ class BotTestCases(unittest.TestCase):
         self.assertTrue(len(dispatch_message("!printsetsinorder", False)[0][0]) > 5)
         self.assertTrue(len(dispatch_message("!printsetsinorder", True)[0][0]) > 5)
 
+    def testDatatog(self):
+        try:
+            from mtgrulesdict import datatog
+        except:
+            return
+        for input in datatog.keys():
+            # Skip the datatog specific commands
+            if "!next" in input or "!define" in input or "!ruling" in input or re.search(r'!(\d)', input):
+                continue
+            # Some cases where we beat the bot
+            if "During which step does" in input or "!primal druid&wretched gryff" in input or "!exquisite blood !sanguine blood" in input or "!bloodbriar" in input or "!insatiable harpy equipped with !trollhide" in input:
+                continue
+            result = dispatch_message(input.lower().rstrip(), True)
+            if len(result) > 1:
+                result = filter(lambda x: x != ('', False), result)
+            print "INPUT: {}n\nOUTPUT: {}\nJUDGEBOT: {}".format(input, datatog[input], result)
+            if datatog[input] == []:
+                self.assertTrue(result == [] or result[0] == ('', False))
+            else:
+                if "//" not in input:  # Skip the checking against split cards for now
+                    self.assertTrue(len(result) == len(datatog[input]))
+                    if "found and sent to" not in datatog[input][0] and "containing the words" not in datatog[input][0] and "Duplicate response withheld" not in datatog[input][0]:
+                        for (idx, item) in enumerate(result):
+                            # Datatog doesn't show reminder text
+                            item = re.sub(r'\([^Part].*?\)', '', item[0])
+                            print datatog[input][idx]
+                            print item
+                            print fuzz.ratio(datatog[input][idx], item)
+                            self.assertTrue(fuzz.ratio(datatog[input][idx], item) > 60)
 
 if __name__ == '__main__':
     reload(sys)  # Reload does the trick!
