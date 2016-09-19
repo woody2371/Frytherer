@@ -22,6 +22,7 @@ from itertools import chain, izip, repeat, islice
 from threading import RLock
 from cachetools import cached, LRUCache, hashkey
 from fuzzywuzzy import process, fuzz
+from HTMLParser import HTMLParser
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -29,6 +30,7 @@ logging.basicConfig(level=logging.DEBUG)
 cache = LRUCache(maxsize=100)
 lock = RLock()
 logging.debug("Cache instantiated")
+h = HTMLParser()
 
 # Try open the database
 logging.debug("Opening database connection")
@@ -290,9 +292,13 @@ def dispatch_message(incomingMessage, fromChannel):
     OUTPUT: List of tuple of (reply_message, pm_override)
     OUTPUT: pm_override is TRUE if the reply should go through PM regardless
     """
+    incomingMessage = h.unescape(incomingMessage)
     logging.debug("Dispatching message: {} (Channel: {})".format(incomingMessage, fromChannel))
     if word_ending_in_bang.search(incomingMessage) and not word_starting_with_bang.search(incomingMessage):
         logging.warning("WEIB Skip")
+        return []
+    if "!!" in incomingMessage:
+        logging.warning("Double Bang Skip")
         return []
     command_list = bot_command_regex.findall(incomingMessage)
     logging.debug("Command list: {}".format(command_list))
@@ -504,7 +510,7 @@ def handle_public_message(message, message_text):  # pragma: no cover
     except KeyError:
         logging.debug("Private channel ID {}".format(message.body['channel']))
 
-    replies = dispatch_message((message.body['text']).lower().rstrip(), fromChannel=True)
+    replies = dispatch_message((message.body['text']).lower().rstrip().replace("’", "'"), fromChannel=True)
     if type(replies) is not list:
         replies = [replies]
     for reply in replies:
@@ -536,7 +542,7 @@ def handle_private_message(message, message_text):  # pragma: no cover
         logging.debug("Adding leading !")
         message.body['text'] = "!" + message.body['text']
 
-    replies = dispatch_message(message.body['text'].lower().rstrip(), fromChannel=False)
+    replies = dispatch_message(message.body['text'].lower().rstrip().replace("’", "'"), fromChannel=False)
     if type(replies) is not list:
         replies = [replies]
     for reply in replies:

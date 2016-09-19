@@ -506,6 +506,8 @@ def ruleSearch(all_rules, rule_to_search):
     if all_rules == {}:
         return "Rules search not available"
 
+    rule_to_search = gathererCapitalise(rule_to_search)
+
     # print process.extract(rule_to_search, all_rules.keys(), scorer=fuzz.ratio)
     # print process.extract(rule_to_search, all_rules.keys(), scorer=fuzz.partial_ratio)
     # print process.extract(rule_to_search, all_rules.keys(), scorer=fuzz.token_sort_ratio)
