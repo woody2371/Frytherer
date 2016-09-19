@@ -522,7 +522,7 @@ def ruleSearch(all_rules, rule_to_search):
         if rule_to_search not in all_rules and backup_rule:
             logging.debug("Using backup")
             # Give me the highest score, breaking ties by the shortest length
-            best = max(backup_rule, key=lambda x: (x[1], len(x[0]*-1)))
+            best = max(backup_rule, key=lambda x: (x[1], len(x[0])*-1))
             rule_to_search = best[0]
         if "." not in rule_to_search and rule_to_search + ".1" in all_rules:
             # Give them back the one after the heading too

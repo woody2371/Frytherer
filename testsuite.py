@@ -339,7 +339,7 @@ class BotTestCases(unittest.TestCase):
                          1539, 1568, 1625, 1657, 1678, 1684, 1725, 1738, 1744, 1746, 1754,
                          1763, 1812]
         startCount = numbersToSkip[-1]
-        startCount = 900
+        startCount = 1970
         # TODO: 1049 and 1300 :( :( Hopefully won't happen on our Slack
         # TODO: 1498
 
