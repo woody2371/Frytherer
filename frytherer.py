@@ -10,6 +10,7 @@ try:
     import re2 as re
 except ImportError:
     import re
+from fuzzywuzzy import process, fuzz
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
@@ -504,13 +505,45 @@ def ruleSearch(all_rules, rule_to_search):
     """
     if all_rules == {}:
         return "Rules search not available"
-    if rule_to_search in all_rules:
-        if "." not in rule_to_search and rule_to_search+".1" in all_rules:
+
+    # print process.extract(rule_to_search, all_rules.keys(), scorer=fuzz.ratio)
+    # print process.extract(rule_to_search, all_rules.keys(), scorer=fuzz.partial_ratio)
+    # print process.extract(rule_to_search, all_rules.keys(), scorer=fuzz.token_sort_ratio)
+    # print process.extract(rule_to_search, all_rules.keys(), scorer=fuzz.token_set_ratio)
+
+    # Just fucken special case it
+    #if rule_to_search == "die":
+    #    rule_to_search = "dies"
+
+    backup_rule = process.extract(rule_to_search, all_rules.keys(), scorer=fuzz.token_set_ratio)
+    backup_rule = filter(lambda x: x[1] >= 80 and len(x[0]) > 3, backup_rule)
+    logging.debug("Rules Query for {}.  Found backup/s? {}".format(rule_to_search, backup_rule))
+    if rule_to_search in all_rules or backup_rule:
+        if rule_to_search not in all_rules and backup_rule:
+            logging.debug("Using backup")
+            # Give me the highest score, breaking ties by the shortest length
+            best = max(backup_rule, key=lambda x: (x[1], len(x[0]*-1)))
+            rule_to_search = best[0]
+        if "." not in rule_to_search and rule_to_search + ".1" in all_rules:
             # Give them back the one after the heading too
-            return [rule_to_search + ": " + all_rules[rule_to_search], rule_to_search+".1" + ": " + all_rules[rule_to_search+".1"]]
+            logging.debug("Detected heading, giving more")
+            return [rule_to_search + ": " + all_rules[rule_to_search], rule_to_search + ".1" + ": " + all_rules[rule_to_search + ".1"]]
+        if re.match(r'([^0-9]+)', rule_to_search) and "See rule" in all_rules[rule_to_search] and "See rules" not in all_rules[rule_to_search] and "and rule" not in all_rules[rule_to_search] and "and section" not in all_rules[rule_to_search]:
+            # Give them back the referenced rule too
+            ref_ruled = re.search(r'See rule (\d+\.{0,1}\d*)', all_rules[rule_to_search])
+            if ref_ruled:
+                new_rule = ref_ruled.group(1)
+                logging.debug("Detected glossary, giving reference of {}".format(new_rule))
+                if new_rule in all_rules:
+                    # Prefer a more specific rule
+                    if new_rule + "a" in all_rules:
+                        new_rule = new_rule + "a"
+                    elif re.match(r'\d{3}', new_rule) and new_rule + ".1" in all_rules:
+                        new_rule = new_rule + ".1"
+                    return [rule_to_search + ": " + all_rules[rule_to_search], new_rule + ": " + all_rules[new_rule]]
         return (rule_to_search + ": " + all_rules[rule_to_search])
     else:
-        rules_list = [(x, y) for (x, y) in all_rules.items() if re.search(rule_to_search, y, re.I)]
+        rules_list = [(x, y) for (x, y) in all_rules.items() if re.search(re.escape(rule_to_search), y, re.I)]
         for (rule_no, rule) in sorted(rules_list):
             return (str(rule_no) + ": " + rule)
     return "No rule/s found"

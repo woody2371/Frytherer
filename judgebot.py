@@ -43,7 +43,7 @@ except sqlite.OperationalError:  # pragma: no cover
 
 # Check if the database actually has stuff
 try:
-    c.execute('SELECT DISTINCT(name) FROM cards WHERE layout NOT IN ("token", "vanguard", "plane", "phenomenon", "scheme") ORDER BY name')
+    c.execute('SELECT DISTINCT(name) FROM cards WHERE layout NOT IN ("token", "vanguard", "plane", "phenomenon", "scheme") AND NOT(printings = "[u\'UGL\']" or printings = "[u\'UNH\']") ORDER BY type, name')
     allCardNames = [y[0].lower() for y in c.fetchall()]
     numCards = len(allCardNames)
     logging.debug("Found %d cards" % numCards)
@@ -51,7 +51,7 @@ except sqlite.OperationalError:  # pragma: no cover
     logging.error("No cards in DB? Try running dbimport.py")
     sys.exit(1)
 
-c.execute('SELECT DISTINCT(name) FROM cards WHERE type LIKE ?', ['%Legendary%'])
+c.execute('SELECT DISTINCT(name) FROM cards WHERE type LIKE ? order by type', ['%Legendary%'])
 allLegendaries = [y[0].lower() for y in c.fetchall()]
 
 try:
@@ -65,7 +65,7 @@ except IOError:  # pragma: no cover
 terms = {}
 all_rules = {}
 for rule in rules:
-    x = rule.split('. ')
+    x = re.split(r'(?:\. )|(?:: )', rule)
     all_rules[x[0]] = ". ".join(x[1:])
 del rules
 
@@ -98,10 +98,13 @@ def intersperse(delimiter, seq):  # pragma: no cover
     """
     return islice(chain.from_iterable(izip(repeat(delimiter), seq)), 1, None)
 
-rule_regexp = re.compile('!{0,1}(?:\d)+\.(?:.*)')
-bot_command_regex = re.compile('[!&]([^!&]+)')
-single_quoted_word = re.compile('^(?:\"|\')\w+(?:\"|\')$')
-split_card_regex = re.compile('(.*?)\s*//\s*(.*)')
+rule_regexp = re.compile(r'((?:\d)+\.(?:.*?)\S*)')
+bot_command_regex = re.compile(r'[!&]([^!&]+)')
+single_quoted_word = re.compile(r'^(?:\"|\')\w+(?:\"|\')$')
+split_card_regex = re.compile(r'(.*?)\s*//\s*(.*)')
+non_text_regex = re.compile(r'^[^\w]+$')
+word_ending_in_bang = re.compile(r'\w+! ')
+word_starting_with_bang = re.compile(r'[^\w]!(?: *)\w+')
 
 
 def validate_colon_mode(s, loc, tokens):
@@ -128,6 +131,156 @@ total_thing = Combine((colon_total | colon_or_bang_total | math_total) + operand
 super_total = OneOrMore(Optional(OneOrMore(boolean_operators)) + Optional(OneOrMore(brackets)) + total_thing + Optional(OneOrMore(brackets)) + Optional(OneOrMore(boolean_operators)))
 
 
+def guessCardName(message, card_tokens):
+    # TODO: Be better with the [f(x) for x if f(x)] efficiency
+    logging.debug("Guessing! {}".format(card_tokens))
+    cards_found = []
+    for i in xrange(len(card_tokens), 0, -1):
+        card_name = " ".join(card_tokens[:i])
+        if re.match(single_quoted_word, card_name):
+            logging.debug("Single quoted word detected, stripping")
+            card_name = card_name[1:-1]
+        # Strip ending punctuation etc
+        card_name = re.sub(r'\W$', '', card_name)
+        logging.debug("Processing {}".format(card_name))
+        logging.debug("Trying to figure out card name")
+        logging.debug("Maybe we get extremely lucky")
+        if card_name in allCardNames:
+            logging.debug("We do!")
+            cards_found.append('en:'+card_name)
+            break
+        logging.debug("We don't")
+        if len(card_name) < 3:
+            logging.warning("Skipping due to being too short")
+            continue
+        if card_tokens[i - 1].startswith("!"):
+            logging.error("Exiting due to new command")
+            break
+        # print process.extractOne(card_name, allCardNames, scorer=fuzz.ratio)
+        # print process.extractOne(card_name, allCardNames, scorer=fuzz.partial_ratio)
+        # print process.extractOne(card_name, allCardNames, scorer=fuzz.token_sort_ratio)
+        # print process.extractOne(card_name, allCardNames, scorer=fuzz.token_set_ratio)
+        # print "---"
+        # print process.extractOne(card_name, allLegendaries, scorer=fuzz.ratio)
+        # print process.extractOne(card_name, allLegendaries, scorer=fuzz.partial_ratio)
+        # print process.extractOne(card_name, allLegendaries, scorer=fuzz.token_sort_ratio)
+        # print process.extractOne(card_name, allLegendaries, scorer=fuzz.token_set_ratio)
+
+        # Get best normal guess
+        (quick_guess_card, quick_guess_ratio) = process.extractOne(card_name, allCardNames, scorer=fuzz.ratio)
+        logging.debug("Best guess: {} ({})".format(quick_guess_card, quick_guess_ratio))
+        if quick_guess_ratio >= 81:
+            # First pass is probably pretty good
+            # Kind of have to keep it at 81
+            v2 = process.extractOne(card_name, allCardNames, scorer=fuzz.partial_ratio)
+            v4 = process.extractOne(card_name, allCardNames, scorer=fuzz.token_set_ratio)
+
+            logging.debug("Attempted Mulligan into {} {}".format(v2, v4))
+            if v2[0] != quick_guess_card and v2[0] == v4[0] and v2[1] > quick_guess_ratio and len(v2[0]) > len(quick_guess_card):
+                cards_found.append('en:"{}"'.format(v2[0]))
+                logging.warning("Mulligan success!")
+                break
+            elif v2[0] == quick_guess_card and v4[0] == quick_guess_card:
+                vx = [(x, fuzz.token_sort_ratio(x[:len(card_name)], card_name)) for x in allCardNames if (fuzz.token_sort_ratio(x[:len(card_name)], card_name) > 95)]
+                if vx and vx[0][0] != v2[0]:
+                    cards_found.append('en:"{}"'.format(vx[0][0]))
+                    logging.warning("WILD CARD BITCHES!")
+                else:
+                    logging.warning("Mulligan override!")
+                    cards_found.append('en:"{}"'.format(quick_guess_card))
+                break
+            else:
+                logging.debug("Outer Else")
+                # Try the best partial card match
+                backupCard = [(x, fuzz.ratio(x[:len(card_name)], card_name)) for x in allCardNames if (fuzz.ratio(x[:len(card_name)], card_name) > quick_guess_ratio + 10)]
+                if backupCard:
+                    best = max(backupCard, key=lambda x: x[1])
+                    logging.debug("Backing up with {}".format(best))
+                    if (len(best[0]) >= len(quick_guess_card)):
+                        logging.warning("It's good!")
+                        cards_found.append('en:"%s"' % best[0])
+                        break
+                else:
+                    logging.debug("Inner Else")
+                    if quick_guess_ratio < 87:
+                        # Last chance qualifiers
+                        (best, score) = process.extractOne(card_name, allCardNames, scorer=fuzz.token_sort_ratio)
+                        if score == 100 and len(best) >= len(quick_guess_card):
+                            logging.warning("Extra special backup: {}".format(best))
+                            cards_found.append('en:"%s"' % best)
+                            break
+                        else:
+                            logging.debug("Screw it")
+                            cards_found.append('en:"{}"'.format(quick_guess_card))
+                            break
+                    else:
+                        logging.debug("Deepest Else")
+                        cards_found.append('en:"{}"'.format(quick_guess_card))
+                        break
+        elif quick_guess_ratio >= 60:
+            v2 = process.extractOne(card_name, allLegendaries, scorer=fuzz.partial_ratio)
+            if v2[1] >= 90 and v2[0] == quick_guess_card:
+                logging.warning("Wat")
+                cards_found.append('en:"{}"'.format(quick_guess_card))
+                break
+    # We tried all the words down to one and no matches. Try a bunch of bullshit
+    if not cards_found and len(message) >= 4:
+        logging.debug("Commence backup")
+        for backup_card_name in [message, card_tokens[0]]:
+            if len(backup_card_name) < 4:
+                continue
+            logging.debug("Looping through {}".format(backup_card_name))
+            if len(backup_card_name) >= 4:
+                backup1 = process.extract(backup_card_name, allLegendaries, scorer=fuzz.token_set_ratio)
+                backup2 = [x for x in allCardNames if x.startswith(backup_card_name)]
+                backup3 = [x for x in allCardNames if fuzz.ratio(x[:len(backup_card_name)], backup_card_name) > 87]
+                logging.debug("FOUND BACKUP1: {} BACKUP2: {} BACKUP3: {}".format(backup1, backup2, backup3))
+                if len(backup3) == 1:
+                    logging.warning("Using Backup 3")
+                    cards_found.append('en:"%s"' % backup3[0])
+                    break
+                elif len(backup2) == 1:
+                    logging.warning("Using exact Backup 2")
+                    cards_found.append('en:"%s"' % backup2[0])
+                    break
+                elif backup1:
+                    # Try match from the start
+                    foundMax = 0
+                    foundMaxRatio = 0
+                    foundMaxName = ""
+                    for b1 in backup1:
+                        if b1[1] >= 85 and b1[1] >= foundMax:
+                            foundMax = b1[1]
+                            r = fuzz.ratio(b1[0][:len(backup_card_name)], backup_card_name)
+                            if r > foundMaxRatio:
+                                foundMaxRatio = r
+                                foundMaxName = b1[0]
+                    if foundMax:
+                        logging.warning("Using Backup 1")
+                        cards_found.append('en:"%s"' % foundMaxName)
+                        break
+                if backup2:
+                    logging.debug("Trying Dodgy Backup 2")
+                    # ultimate last resort, pick the option with the comma
+                    v = filter(lambda x: ',' in x, backup2)
+                    if len(v) == 1:
+                        logging.warning("ULR")
+                        cards_found.append('en:"%s"' % v[0])
+                        break
+                    else:
+                        # super mega ultimate last resort, pick the longest one :D
+                        logging.warning("SMULR")
+                        cards_found.append('en:"%s"' % max(backup2, key=len))
+                        break
+                    logging.debug("Nope")
+
+        if quick_guess_ratio > 80:
+            logging.debug("Going with the original plan (80 - 81% confidence)")
+            cards_found.append('en:"%s"' % quick_guess_card)
+    logging.debug("Finally, the cards: {}".format(cards_found))
+    return cards_found
+
+
 def dispatch_message(incomingMessage, fromChannel):
     """For a message, figure out how to handle it and return the text to reply with.
     The message should probably start with a "!" or at least individual commands within it should.
@@ -138,26 +291,38 @@ def dispatch_message(incomingMessage, fromChannel):
     OUTPUT: pm_override is TRUE if the reply should go through PM regardless
     """
     logging.debug("Dispatching message: {} (Channel: {})".format(incomingMessage, fromChannel))
+    if word_ending_in_bang.search(incomingMessage) and not word_starting_with_bang.search(incomingMessage):
+        logging.warning("WEIB Skip")
+        return []
     command_list = bot_command_regex.findall(incomingMessage)
     logging.debug("Command list: {}".format(command_list))
     ret = []
     for (idx, message) in enumerate(command_list):
-        card_tokens = re.split(' ', message[0:35])
-        card_tokens = filter(lambda x: x != '', card_tokens)
-        logging.debug("Tokenising: {}".format(card_tokens))
-        # Try something iffy
-        if message.startswith("! ") or message.startswith("  ") or (message.startswith(" ") and len(card_tokens) > 1):
+        if non_text_regex.match(message) or message.startswith("  "):
+            logging.warning("Iffy skip")
             continue
-        if split_card_regex.match(message):
-            # Process the left word, slip the right one into the command list
-            (left, right) = split_card_regex.match(message).groups()
-            message = left
-            command_list.insert(idx + 1, right)
         message = message.strip()
         if re.match(single_quoted_word, message):
             logging.debug("Single quoted word detected, stripping")
             message = message[1:-1]
+        if message == '':
+            continue
+        if message.startswith("card "):
+            message = message[5:]
+
+        rem = rule_regexp.match(message)
+        if split_card_regex.match(message):
+            # Process the left word, slip the right one into the command list
+            (left, right) = split_card_regex.match(message).groups()
+            logging.warning("Split card detected! {} // {}".format(left, right))
+            message = left
+            command_list.insert(idx + 1, right)
+
+        card_tokens = re.split(' ', message[0:35])
+        card_tokens = filter(lambda x: x != '', card_tokens)
+        logging.debug("Tokenising: {}".format(card_tokens))
         message_words = message.split()
+
         if message == "help" or message_words[0] == "help":
             ret.append((help(), True))
         elif message_words[0] == "helpsearch":
@@ -187,7 +352,7 @@ def dispatch_message(incomingMessage, fromChannel):
             if not cards:
                 ret.append(("", False))
             if len(cards) > 20:
-                ret.append(("Too many cards to print! ({} > 20). Please narrow search".format(len(cards)), False))
+                ret.append(("Too many cards to print! ({} > 20).".format(len(cards)), False))
             if fromChannel:
                 # If we've asked for some cards in a channel
                 if len(cards) == 1:
@@ -196,8 +361,8 @@ def dispatch_message(incomingMessage, fromChannel):
                 elif len(cards) <= 5:
                     # 2 - 5 cards is fine, but only show name and mana cost
                     ret.append(("\n".join([printCard(c, card, quick=True, slackChannel=fromChannel) for card in cards]), False))
-                else:
-                    # > 5 is only showing name and mana cost and forced to PM
+                elif len(cards) <= 30:
+                    # > 5 <= 30 is only showing name and mana cost and forced to PM
                     ret.extend([("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=True, slackChannel=fromChannel) for card in cards]), True)])
             else:
                 ret.append(("\n".join([printCard(c, card, quick=False, slackChannel=fromChannel) for card in cards] + ["{} result/s".format(len(cards))]), False))
@@ -241,7 +406,7 @@ def dispatch_message(incomingMessage, fromChannel):
             if not cards:
                 ret.append(("No cards found", False))
             if len(cards) > 20:
-                ret.append(("Too many cards to print! ({} > 20). Please narrow search".format(len(cards)), False))
+                ret.append(("Too many cards to print! ({} > 20).".format(len(cards)), False))
             if fromChannel:
                 # If we've asked for some cards in a channel
                 # If they're quick, <= 10 is fine
@@ -250,75 +415,30 @@ def dispatch_message(incomingMessage, fromChannel):
                 if len(cards) <= 5:
                     # 1 - 5 cards is fine
                     ret.append(("\n".join([printCard(c, card, quick=quick, slackChannel=fromChannel) for card in cards]), False))
-                else:
-                    # > 5 is only showing name and mana cost and forced to PM
+                elif len(cards) <= 30:
+                    # > 5 <= 30 is only showing name and mana cost and forced to PM
                     ret.extend([("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=True, slackChannel=fromChannel) for card in cards]), True)])
             else:
                 ret.append(("\n".join([printCard(c, card, quick=quick, slackChannel=fromChannel) for card in cards] + ["{} result/s".format(len(cards))]), False))
-        elif message.startswith("r ") or message.startswith("rule ") or rule_regexp.match(message):
+        elif message.startswith("r ") or message.startswith("rule ") or message.startswith("def ") or message.startswith("define ") or rem:
             logging.debug("Rules query!")
-            if message.startswith("r "):
+            if rem:
+                message = rem.group(1)
+            elif message.startswith("r "):
                 message = message[2:]
             elif message.startswith("rule "):
                 message = message[5:]
+            elif message.startswith("define "):
+                message = message[7:]
+            elif message.startswith("def "):
+                message = message[4:]
             rs = ruleSearch(all_rules, message)
             if type(rs) is not list:
                 rs = [rs]
             for r in rs:
                 ret.append((r, False))
         else:
-            logging.debug("Trying to figure out card name")
-            logging.debug("Maybe we get extremely lucky")
-            if message in allCardNames:
-                logging.debug("We do!")
-                cards = cardSearch(c, ['en:' + message])
-                ret.append((printCard(c, cards[0], quick=False, slackChannel=fromChannel), False))
-                continue
-            logging.debug("We don't")
-            cards_found = []
-            real = False
-            for i in xrange(len(card_tokens), 0, -1):
-                card_name = " ".join(card_tokens[:i])
-                print card_name
-                if len(card_name) < 3:
-                    logging.debug("Skipping due to being too short")
-                    continue
-                if card_tokens[i - 1].startswith("!"):
-                    break
-                realCard = process.extractOne(card_name, allCardNames, scorer=fuzz.ratio)
-                print realCard
-                if realCard[1] > 80:
-                    cards_found.append('en:"%s"' % realCard[0])
-                    real = True
-                    break
-            if not real:
-                # No matches? Try a single word legendary
-                if len(card_tokens[0]) > 4:
-                    for backup_card_name in [message, card_tokens[0]]:
-                        backup1 = process.extractOne(backup_card_name, allLegendaries, scorer=fuzz.token_set_ratio)
-                        backup2 = [x for x in allCardNames if x.startswith(backup_card_name)]
-                        backup3 = [x for x in allCardNames if fuzz.ratio(x[:len(backup_card_name)], backup_card_name) > 90]
-                        logging.debug("FOUND BACKUP1: {} BACKUP2: {} BACKUP3: {}".format(backup1, backup2, backup3))
-                        if len(backup3) == 1:
-                            cards_found.append('en:"%s"' % backup3[0])
-                            break
-                        elif len(backup2) == 1:
-                            cards_found.append('en:"%s"' % backup2[0])
-                            break
-                        elif backup1 and backup1[1] >= 85:
-                            cards_found.append('en:"%s"' % backup1[0])
-                            break
-                        elif backup2:
-                            # ultimate last resort, pick the option with the comma
-                            v = filter(lambda x: ',' in x, backup2)
-                            if len(v) == 1:
-                                cards_found.append('en:"%s"' % v[0])
-                                break
-                            else:
-                                # super mega ultimate last resort, pick the longest one :D
-                                cards_found.append('en:"%s"' % max(backup2, key=len))
-                                break
-            logging.debug("Finally, the cards: {}".format(cards_found))
+            cards_found = guessCardName(message, card_tokens)
             if cards_found:
                 terms = list(intersperse("OR", cards_found))
                 logging.debug("Searching for {}".format(terms))
