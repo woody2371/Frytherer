@@ -171,6 +171,12 @@ def guessCardName(message, card_tokens):
         # Get best normal guess
         (quick_guess_card, quick_guess_ratio) = process.extractOne(card_name, allCardNames, scorer=fuzz.ratio)
         logging.debug("Best guess: {} ({})".format(quick_guess_card, quick_guess_ratio))
+
+        if quick_guess_card in card_name and len(quick_guess_card) > 5:
+            # Does our guess appear entirely in our input?
+            logging.error("Early Exit")
+            cards_found.append('en:"{}"'.format(quick_guess_card))
+            break
         if quick_guess_ratio >= 81:
             # First pass is probably pretty good
             # Kind of have to keep it at 81
@@ -191,6 +197,16 @@ def guessCardName(message, card_tokens):
                     logging.warning("Mulligan override!")
                     cards_found.append('en:"{}"'.format(quick_guess_card))
                 break
+            elif v2[1] > 90 and v4[1] > 90:
+                # Does our input appear entirely in our guess?
+                if card_name in v2[0]:
+                    logging.error("Poop")
+                    cards_found.append('en:"{}"'.format(v2[0]))
+                    break
+                elif card_name in v4[0]:
+                    logging.error("Poop2")
+                    cards_found.append('en:"{}"'.format(v4[0]))
+                    break
             else:
                 logging.debug("Outer Else")
                 # Try the best partial card match
