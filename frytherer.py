@@ -130,6 +130,7 @@ def cardSearch(cursor, terms):
     do_later = []
     was_not = False
     for term in terms:
+        term = term.encode('utf-8')
         logging.debug("Processing term {}".format(term))
         term = term.replace('"', '')
         if term.lower() in ["and", "or", "(", ")"]:

@@ -8,7 +8,7 @@ Comprehensive Rules and other such useful garbage
 import random, sys
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
-from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url
+from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe
 from slackbot.bot import Bot
 from slackbot.bot import respond_to
 from slackbot.bot import listen_to
@@ -53,7 +53,7 @@ except sqlite.OperationalError:  # pragma: no cover
     logging.error("No cards in DB? Try running dbimport.py")
     sys.exit(1)
 
-c.execute('SELECT DISTINCT(name) FROM cards WHERE type LIKE ? order by type', ['%Legendary%'])
+c.execute('SELECT DISTINCT(name) FROM cards WHERE type LIKE ? OR type LIKE ? order by type', ('%Legendary%', '%Planeswalker%'))
 allLegendaries = [y[0].lower() for y in c.fetchall()]
 
 try:
@@ -105,8 +105,10 @@ bot_command_regex = re.compile(r'[!&]([^!&]+)')
 single_quoted_word = re.compile(r'^(?:\"|\')\w+(?:\"|\')$')
 split_card_regex = re.compile(r'(.*?)\s*//\s*(.*)')
 non_text_regex = re.compile(r'^[^\w]+$')
-word_ending_in_bang = re.compile(r'\w+! ')
-word_starting_with_bang = re.compile(r'[^\w]!(?: *)\w+')
+#word_ending_in_bang = re.compile(r'\w+! ')
+#word_starting_with_bang = re.compile(r'[^\w]!(?: *)\w+')
+word_ending_in_bang = re.compile(r'\S+! ')
+word_starting_with_bang = re.compile(r'\s+!(?: *)\S+')
 
 
 def validate_colon_mode(s, loc, tokens):
@@ -149,7 +151,7 @@ def guessCardName(message, card_tokens):
         logging.debug("Maybe we get extremely lucky")
         if card_name in allCardNames:
             logging.debug("We do!")
-            cards_found.append('en:'+card_name)
+            cards_found.append('en:' + card_name)
             break
         logging.debug("We don't")
         if len(card_name) < 3:
@@ -158,6 +160,8 @@ def guessCardName(message, card_tokens):
         if card_tokens[i - 1].startswith("!"):
             logging.error("Exiting due to new command")
             break
+        if card_name == "thank you":
+            continue
         # print process.extractOne(card_name, allCardNames, scorer=fuzz.ratio)
         # print process.extractOne(card_name, allCardNames, scorer=fuzz.partial_ratio)
         # print process.extractOne(card_name, allCardNames, scorer=fuzz.token_sort_ratio)
@@ -169,21 +173,48 @@ def guessCardName(message, card_tokens):
         # print process.extractOne(card_name, allLegendaries, scorer=fuzz.token_set_ratio)
 
         # Get best normal guess
-        (quick_guess_card, quick_guess_ratio) = process.extractOne(card_name, allCardNames, scorer=fuzz.ratio)
+        extracted_cards = process.extract(card_name, allCardNames, scorer=fuzz.ratio)
+        (quick_guess_card, quick_guess_ratio) = extracted_cards[0]
+        quick_guess_card = quick_guess_card.encode('utf-8')
         logging.debug("Best guess: {} ({})".format(quick_guess_card, quick_guess_ratio))
 
-        if quick_guess_card in card_name and len(quick_guess_card) > 5:
-            # Does our guess appear entirely in our input?
-            logging.error("Early Exit")
+        if quick_guess_ratio > 85 and quick_guess_card in card_name and len(quick_guess_card) > 5:
+            # 85% for borborygmos, en
+            # Does our input appear entirely in our guess?
+            logging.error("Early Exit Fry Style")
             cards_found.append('en:"{}"'.format(quick_guess_card))
             break
-        if quick_guess_ratio >= 81:
+        if quick_guess_ratio >= 75 and card_name in quick_guess_card and len(quick_guess_card) > 5 and card_name != "goblin":
+            # 75% for Take Poss vs Take Possession (was 90)
+            # Does our guess appear entirely in our input?
+            logging.error("Early Exit Woody Style")
+            cards_found.append('en:"{}"'.format(quick_guess_card))
+            break
+        if len(card_tokens) == 1 or len(card_tokens) == 2:
+            # Check thee legendaries
+            legends = process.extract(card_name, allLegendaries, scorer=fuzz.token_set_ratio)
+            starting_legends = filter(lambda x: x[0].startswith(card_name), legends)
+            if len(starting_legends) == 1 and starting_legends[0][1] == 100:
+                logging.error("Legendary YOLO")
+                cards_found.append('en:"{}"'.format(starting_legends[0][0]))
+                break
+        if quick_guess_ratio >= 80:
             # First pass is probably pretty good
             # Kind of have to keep it at 81
             v2 = process.extractOne(card_name, allCardNames, scorer=fuzz.partial_ratio)
             v4 = process.extractOne(card_name, allCardNames, scorer=fuzz.token_set_ratio)
 
             logging.debug("Attempted Mulligan into {} {}".format(v2, v4))
+            if v2[1] >= 90 and v4[1] >= 90:
+                # Does our input appear entirely in our better guesses?
+                if card_name in v2[0]:
+                    logging.error("Poop")
+                    cards_found.append('en:"{}"'.format(v2[0]))
+                    break
+                elif card_name in v4[0]:
+                    logging.error("Poop2")
+                    cards_found.append('en:"{}"'.format(v4[0]))
+                    break
             if v2[0] != quick_guess_card and v2[0] == v4[0] and v2[1] > quick_guess_ratio and len(v2[0]) > len(quick_guess_card):
                 cards_found.append('en:"{}"'.format(v2[0]))
                 logging.warning("Mulligan success!")
@@ -197,16 +228,6 @@ def guessCardName(message, card_tokens):
                     logging.warning("Mulligan override!")
                     cards_found.append('en:"{}"'.format(quick_guess_card))
                 break
-            elif v2[1] > 90 and v4[1] > 90:
-                # Does our input appear entirely in our guess?
-                if card_name in v2[0]:
-                    logging.error("Poop")
-                    cards_found.append('en:"{}"'.format(v2[0]))
-                    break
-                elif card_name in v4[0]:
-                    logging.error("Poop2")
-                    cards_found.append('en:"{}"'.format(v4[0]))
-                    break
             else:
                 logging.debug("Outer Else")
                 # Try the best partial card match
@@ -244,14 +265,17 @@ def guessCardName(message, card_tokens):
     # We tried all the words down to one and no matches. Try a bunch of bullshit
     if not cards_found and len(message) >= 4:
         logging.debug("Commence backup")
-        for backup_card_name in [message, card_tokens[0]]:
+        l = [message]
+        if len(card_tokens) > 1:
+            l.append(card_tokens[0])
+        for backup_card_name in l:
             if len(backup_card_name) < 4:
                 continue
             logging.debug("Looping through {}".format(backup_card_name))
             if len(backup_card_name) >= 4:
                 backup1 = process.extract(backup_card_name, allLegendaries, scorer=fuzz.token_set_ratio)
                 backup2 = [x for x in allCardNames if x.startswith(backup_card_name)]
-                backup3 = [x for x in allCardNames if fuzz.ratio(x[:len(backup_card_name)], backup_card_name) > 87]
+                backup3 = [x for x in allCardNames if fuzz.ratio(x[:len(backup_card_name)], backup_card_name) >= 85]  # Was >87
                 logging.debug("FOUND BACKUP1: {} BACKUP2: {} BACKUP3: {}".format(backup1, backup2, backup3))
                 if len(backup3) == 1:
                     logging.warning("Using Backup 3")
@@ -292,9 +316,6 @@ def guessCardName(message, card_tokens):
                         break
                     logging.debug("Nope")
 
-        if quick_guess_ratio > 80:
-            logging.debug("Going with the original plan (80 - 81% confidence)")
-            cards_found.append('en:"%s"' % quick_guess_card)
     logging.debug("Finally, the cards: {}".format(cards_found))
     return cards_found
 
@@ -336,9 +357,12 @@ def dispatch_message(incomingMessage, fromChannel):
         if split_card_regex.match(message):
             # Process the left word, slip the right one into the command list
             (left, right) = split_card_regex.match(message).groups()
-            logging.warning("Split card detected! {} // {}".format(left, right))
-            message = left
-            command_list.insert(idx + 1, right)
+            if "http" not in left:
+                logging.warning("Split card detected! {} // {}".format(left, right))
+                message = left
+                command_list.insert(idx + 1, right)
+            else:
+                pass
 
         card_tokens = re.split(' ', message[0:35])
         card_tokens = filter(lambda x: x != '', card_tokens)
@@ -442,12 +466,14 @@ def dispatch_message(incomingMessage, fromChannel):
                     ret.extend([("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=True, slackChannel=fromChannel) for card in cards]), True)])
             else:
                 ret.append(("\n".join([printCard(c, card, quick=quick, slackChannel=fromChannel) for card in cards] + ["{} result/s".format(len(cards))]), False))
-        elif message.startswith("r ") or message.startswith("rule ") or message.startswith("def ") or message.startswith("define ") or rem:
+        elif message.startswith("r ") or message.startswith("cr ") or message.startswith("rule ") or message.startswith("def ") or message.startswith("define ") or rem:
             logging.debug("Rules query!")
             if rem:
                 message = rem.group(1)
             elif message.startswith("r "):
                 message = message[2:]
+            elif message.startswith("cr "):
+                message = message[3:]
             elif message.startswith("rule "):
                 message = message[5:]
             elif message.startswith("define "):
@@ -475,6 +501,7 @@ def dispatch_message(incomingMessage, fromChannel):
             else:
                 logging.debug("I didn't understand the command")
                 ret.append(("", False))
+    ret = dedupe(ret)
     logging.debug("--- Done ---")
     logging.debug(ret)
     return ret

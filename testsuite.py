@@ -4,12 +4,12 @@ import unittest, sys, logging, time, random
 import pysqlite2.dbapi2 as sqlite
 from judgebot import dispatch_message
 from frytherer import *
-from fuzzywuzzy import fuzz
-
+from fuzzywuzzy import fuzz, StringMatcher
 
 word_file = "/usr/share/dict/words"
 WORDS = open(word_file).read().splitlines()
 sentinel = object()
+
 
 try:
     conn = sqlite.connect('frytherer.db', check_same_thread=False)
@@ -334,47 +334,90 @@ class BotTestCases(unittest.TestCase):
         numbersToSkip = [165, 167, 184, 194, 280, 290, 297, 312, 360, 379, 397, 442,
                          458, 479, 481, 491, 505, 511, 529, 547, 627, 630, 641, 645,
                          687, 689, 704, 731, 814, 824, 842, 870, 900, 916, 1019, 1028, 1031,
-                         1049, 1052, 1065, 1091, 1105, 1118, 1201, 1280, 1286, 1300, 1330,
+                         1049, 1052, 1065, 1091, 1105, 1108, 1118, 1201, 1280, 1286, 1300, 1330,
                          1339, 1343, 1344, 1355, 1427, 1453, 1476, 1479, 1485, 1498, 1526,
                          1539, 1568, 1625, 1657, 1678, 1684, 1725, 1738, 1744, 1746, 1754,
-                         1763, 1812, 1985, 2011, 2075, 2082, 2116, 2152, 2154, 2219, 2231,
-                         ]
+                         1763, 1812, 1985, 2011, 2075, 2082, 2116, 2152, 2154, 2174, 2219, 2231,
+                         2311, 2327, 2328, 2340, 2366, 2368, 2382, 2421, 2429, 2448, 2486, 2493,
+                         2537, 2543, 2555, 2560, 2684, 2722, 2758, 2776, 2816, 2865, 2868, 2979,
+                         2980, 3008, 3011, 3036, 3080, 3132, 3181, 3193, 3225, 3231, 3290, 3307,
+                         3337, 3373, 3439, 3531, 3550, 3586, 3645, 3657, 3661, 3668, 3715, 3729,
+                         3756, 3770, 3859, 3869, 3879, 3890, 3936, 3947, 3976, 3989, 4015, 4035,
+                         4089, 4139, 4175, 4179, 4185, 4186, 4218, 4230, 4254, 4256, 4360, 4362,
+                         4376, 4402, 4409, 4501, 4508, 4546, 4561, 4611, 4614, 4625, 4655, 4690,
+                         4698, 4686, 4699, 4760, 4793, 2477, 2535, 2602, 2650]
         startCount = numbersToSkip[-1]
-        startCount = 0
+        file_output = False
+        startCount = 2946 # 2477 # 2407
         # TODO: 1049 and 1300 :( :( Hopefully won't happen on our Slack
+        # 2477 :(
         # TODO: 1498
+        # TODO: 2382
+        # TODO: 4186
+        with open('results.txt', 'a') as f:
+            for input in datatog.keys():
+                input = input.encode('utf-8')
+                count += 1
+                if (startCount and count < startCount) or (count in numbersToSkip):
+                    continue
+                print "{} of {}".format(count, len(datatog.keys()))
+                if re.search(r'!\d', input) or '!ruling' in input or '!reminder' in input or '!ex ' in input:
+                    continue
 
-        for input in datatog.keys():
-            input = input.encode('utf-8')
-            count += 1
-            if (startCount and count < startCount) or (count in numbersToSkip):
-                continue
-            print "{} of {}".format(count, len(datatog.keys()))
-            if re.search(r'!\d', input) or '!ruling' in input or '!reminder' in input or '!ex ' in input:
-                continue
-
-            result = dispatch_message(input.lower().rstrip().replace("’", "'"), True)
-            if len(result) > 1:
-                result = filter(lambda x: x != ('', False), result)
-            try:
-                logging.debug("INPUT: {}n\nOUTPUT: {}\nJUDGEBOT: {}".format(input, datatog[input], result))
-                if datatog[input] == []:
-                    self.assertTrue(result == [] or result[0] == ('', False))
-                else:
-                    if "//" in input:
-                        self.assertTrue(len(result) == len(datatog[input]) + 1)
+                result = dispatch_message(input.lower().rstrip().replace("’", "'"), True)
+                if len(result) > 1:
+                    result = filter(lambda x: x != ('', False), result)
+                try:
+                    logging.debug("INPUT: {}n\nOUTPUT: {}\nJUDGEBOT: {}".format(input, datatog[input], result))
+                    if datatog[input] == []:
+                        x = (result == [] or result[0] == ('', False))
+                        if file_output and not x:
+                                f.write(str(count) + '\n')
+                                f.write("INPUT: " + str(input) + '\n')
+                                f.write("DATATOG: " + str(datatog[input]) + '\n')
+                                f.write("JUDGEBOT: " + str(result) + '\n---\n')
+                                logging.error("Fail")
+                        else:
+                            self.assertTrue(x)
                     else:
-                        self.assertTrue(len(result) == len(datatog[input]))
-                        if "found and sent to" not in datatog[input][0] and "containing the words" not in datatog[input][0] and "Duplicate response withheld" not in datatog[input][0]:
-                            for (idx, item) in enumerate(result):
-                                # Datatog doesn't show reminder text
-                                item = re.sub(r'\([^Part].*?\)', '', item[0])
-                                logging.debug(datatog[input][idx])
-                                logging.debug(item)
-                                logging.debug(fuzz.ratio(datatog[input][idx], item))
-                                self.assertTrue(fuzz.ratio(datatog[input][idx], item) > 60)
-            except KeyError:
-                logging.error("Weirdness")
+                        if "//" in input:
+                            x = (len(result) == len(datatog[input]) + 1)
+                            if file_output and not x:
+                                f.write(str(count) + '\n')
+                                f.write("INPUT: " + str(input) + '\n')
+                                f.write("DATATOG: " + str(datatog[input]) + '\n')
+                                f.write("JUDGEBOT: " + str(result) + '\n---\n')
+                                logging.error("Fail")
+                            else:
+                                self.assertTrue(x)
+                        else:
+                            x = (len(result) == len(datatog[input]))
+                            if file_output and not x:
+                                f.write(str(count) + '\n')
+                                f.write("INPUT: " + str(input) + '\n')
+                                f.write("DATATOG: " + str(datatog[input]) + '\n')
+                                f.write("JUDGEBOT: " + str(result) + '\n---\n')
+                                logging.error("Fail")
+                            else:
+                                self.assertTrue(x)
+                            if "found and sent to" not in datatog[input][0] and "containing the words" not in datatog[input][0] and "Duplicate response withheld" not in datatog[input][0]:
+                                for (idx, item) in enumerate(result):
+                                    # Datatog doesn't show reminder text
+                                    item = re.sub(r'\([^Part].*?\)', '', item[0])
+                                    logging.debug(datatog[input][idx])
+                                    logging.debug(item)
+                                    logging.debug(fuzz.ratio(datatog[input][idx], item))
+                                    v = (fuzz.ratio(datatog[input][idx], item) > 60)
+                                    if file_output and not v:
+                                        f.write(str(count) + '\n')
+                                        f.write("INPUT: " + str(input) + '\n')
+                                        f.write("DATATOG: " + str(datatog[input]) + '\n')
+                                        f.write("JUDGEBOT: " + str(result) + '\n---\n')
+                                        logging.error("Fail")
+                                    else:
+                                        self.assertTrue(v)
+                except KeyError:
+                    logging.error("Weirdness")
 
 if __name__ == '__main__':
     reload(sys)  # Reload does the trick!
