@@ -5,7 +5,7 @@
 A Slackbot that handles requests for Oracle text,
 Comprehensive Rules and other such useful garbage
 """
-import random, sys
+import random, sys, string
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
 from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe
@@ -174,6 +174,7 @@ def guessCardName(message, card_tokens):
 
         # Get best normal guess
         extracted_cards = process.extract(card_name, allCardNames, scorer=fuzz.ratio)
+        logging.debug("Candidates: {}".format(extracted_cards))
         (quick_guess_card, quick_guess_ratio) = extracted_cards[0]
         quick_guess_card = quick_guess_card.encode('utf-8')
         logging.debug("Best guess: {} ({})".format(quick_guess_card, quick_guess_ratio))
@@ -190,6 +191,20 @@ def guessCardName(message, card_tokens):
             logging.error("Early Exit Woody Style")
             cards_found.append('en:"{}"'.format(quick_guess_card))
             break
+        prefix_check = [c for c in allCardNames if c.startswith(card_name)]
+        if len(prefix_check) == 1:
+            logging.error("Prefix Check!")
+            cards_found.append('en:"{}"'.format(prefix_check[0]))
+            break
+        if type(card_name) is unicode:
+            card_name_no_punctuation = card_name.translate({ord(c): None for c in string.punctuation})
+        else:
+            card_name_no_punctuation = card_name.translate(string.maketrans("",""), string.punctuation)
+        prefix_check_2 = [c for c in allCardNames if c.startswith(card_name_no_punctuation)]
+        if len(prefix_check_2) == 1:
+            logging.error("Prefix Check No Punctuation!")
+            cards_found.append('en:"{}"'.format(prefix_check_2[0]))
+            break
         if len(card_tokens) == 1 or len(card_tokens) == 2:
             # Check thee legendaries
             legends = process.extract(card_name, allLegendaries, scorer=fuzz.token_set_ratio)
@@ -198,6 +213,11 @@ def guessCardName(message, card_tokens):
                 logging.error("Legendary YOLO")
                 cards_found.append('en:"{}"'.format(starting_legends[0][0]))
                 break
+        if len(card_name) >= 4 and quick_guess_ratio > 64 and fuzz.partial_ratio(card_name, quick_guess_card) == 100:
+            # 64% for "valakut"
+            logging.error("Good enough for Government work")
+            cards_found.append('en:"{}"'.format(quick_guess_card))
+            break
         if quick_guess_ratio >= 80:
             # First pass is probably pretty good
             # Kind of have to keep it at 81
@@ -205,13 +225,13 @@ def guessCardName(message, card_tokens):
             v4 = process.extractOne(card_name, allCardNames, scorer=fuzz.token_set_ratio)
 
             logging.debug("Attempted Mulligan into {} {}".format(v2, v4))
-            if v2[1] >= 90 and v4[1] >= 90:
+            if v2[1] >= 80 and v4[1] >= 80:
                 # Does our input appear entirely in our better guesses?
-                if card_name in v2[0]:
+                if card_name.replace(" ", "") in v2[0].replace(" ", ""):
                     logging.error("Poop")
                     cards_found.append('en:"{}"'.format(v2[0]))
                     break
-                elif card_name in v4[0]:
+                elif card_name.replace(" ", "") in v4[0].replace(" ", ""):
                     logging.error("Poop2")
                     cards_found.append('en:"{}"'.format(v4[0]))
                     break
@@ -248,6 +268,9 @@ def guessCardName(message, card_tokens):
                             logging.warning("Extra special backup: {}".format(best))
                             cards_found.append('en:"%s"' % best)
                             break
+                        elif card_tokens[-1] == "and":
+                            logging.error("Do or Die")
+                            continue
                         else:
                             logging.debug("Screw it")
                             cards_found.append('en:"{}"'.format(quick_guess_card))

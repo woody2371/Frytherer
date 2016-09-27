@@ -1,3 +1,5 @@
+#!/usr/bin/python2.7
+# -*- coding: utf-8 -*-
 """Frytherer Module.
 
 This module contains all the helper functions for the
@@ -130,8 +132,9 @@ def cardSearch(cursor, terms):
     do_later = []
     was_not = False
     for term in terms:
-        term = term.encode('utf-8')
-        logging.debug("Processing term {}".format(term))
+        if type(term) is not unicode:
+            term = term.decode('utf-8')
+        logging.debug("Processing term {}".format(term.encode("utf-8")))
         term = term.replace('"', '')
         if term.lower() in ["and", "or", "(", ")"]:
             sql_query += " " + term.upper() + " "
@@ -288,7 +291,7 @@ def cardSearch(cursor, terms):
     logging.debug(sql_query)
     logging.debug(params)
     for (idx, param) in enumerate(params):
-        if re.match(single_quoted_word, str(param)):
+        if re.match(single_quoted_word, str(param.encode('utf-8'))):
             logging.debug("Single quoted word detected ({}), stripping".format(param))
             params[idx] = param[1:-1]
     logging.debug("Fixed: {}".format(params))
@@ -519,13 +522,22 @@ def ruleSearch(all_rules, rule_to_search):
     #    rule_to_search = "dies"
 
     backup_rule = process.extract(rule_to_search, all_rules.keys(), scorer=fuzz.token_set_ratio)
+    logging.debug("Preprocess: {}".format(backup_rule))
     backup_rule = filter(lambda x: x[1] >= 80 and len(x[0]) > 3, backup_rule)
+    if not backup_rule:
+        prefix_check = [v for v in all_rules.keys() if v.startswith(rule_to_search)]
+        if len(prefix_check) == 1:
+            backup_rule = [(prefix_check[0], 100)]
     logging.debug("Rules Query for {}.  Found backup/s? {}".format(rule_to_search, backup_rule))
     if rule_to_search in all_rules or backup_rule:
         if rule_to_search not in all_rules and backup_rule:
             logging.debug("Using backup")
-            # Give me the highest score, breaking ties by the shortest length
-            best = max(backup_rule, key=lambda x: (x[1], len(x[0])*-1))
+            # Tie breaker
+            if len(backup_rule) == 2 and backup_rule[0][1] == 100 and backup_rule[1][1] == 100:
+                best = process.extractOne(rule_to_search, all_rules.keys(), scorer=fuzz.token_sort_ratio)
+            else:
+                # Give me the highest score, breaking ties by the shortest length
+                best = max(backup_rule, key=lambda x: (x[1], len(x[0])*-1))
             rule_to_search = best[0]
         if "." not in rule_to_search and rule_to_search + ".1" in all_rules:
             # Give them back the one after the heading too
@@ -775,9 +787,9 @@ def url(document):
             logging.debug(sys.exc_info())
             ret = "Something went wrong parsing your request"
     elif doc_words[0] == "mtr":
-        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_mtr_22jul16_en.pdf"
+        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_mtr_30sep16_en.pdf"
     elif doc_words[0] == "ipg":
-        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_ipg_22jul16_en.pdf"
+        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_ipg_30sep16_en.pdf"
     elif doc_words[0] == "aipg":
         ret = "http://blogs.magicjudges.org/rules/ipg/"
     elif doc_words[0] == "amtr":
