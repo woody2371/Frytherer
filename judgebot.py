@@ -35,7 +35,7 @@ h = HTMLParser()
 # Try open the database
 logging.debug("Opening database connection")
 try:
-    conn = sqlite.connect('frytherer.db', check_same_thread=False)
+    conn = sqlite.connect('frytherer.db', flags=sqlite.SQLITE_OPEN_READONLY, check_same_thread=False)
     conn.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
     conn.row_factory = sqlite.Row
     c = conn.cursor()
