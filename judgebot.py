@@ -196,15 +196,19 @@ def guessCardName(message, card_tokens):
             logging.error("Prefix Check!")
             cards_found.append('en:"{}"'.format(prefix_check[0]))
             break
+        elif len(prefix_check) >= 5:
+            logging.error("Too many prefixes!")
+            return ["en:" + c for c in prefix_check]
         if type(card_name) is unicode:
             card_name_no_punctuation = card_name.translate({ord(c): None for c in string.punctuation})
         else:
-            card_name_no_punctuation = card_name.translate(string.maketrans("",""), string.punctuation)
+            card_name_no_punctuation = card_name.translate(string.maketrans("", ""), string.punctuation)
         prefix_check_2 = [c for c in allCardNames if c.startswith(card_name_no_punctuation)]
         if len(prefix_check_2) == 1:
             logging.error("Prefix Check No Punctuation!")
             cards_found.append('en:"{}"'.format(prefix_check_2[0]))
             break
+        listOfCardsToCheck = (prefix_check + prefix_check_2) or allCardNames
         if len(card_tokens) == 1 or len(card_tokens) == 2:
             # Check thee legendaries
             legends = process.extract(card_name, allLegendaries, scorer=fuzz.token_set_ratio)
@@ -517,7 +521,7 @@ def dispatch_message(incomingMessage, fromChannel):
                 logging.debug("Found {} cards".format(len(cards)))
                 if len(cards) > 20:
                     ret.append(("Too many cards to print! ({} > 20). Please narrow search".format(len(cards)), False))
-                if len(cards) <= 5 or not fromChannel:
+                if len(cards) <= 2 or not fromChannel:
                     ret.append(("\n".join([printCard(c, card, quick=False, slackChannel=fromChannel) for card in cards]), False))
                 else:
                     ret.extend([("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=False, slackChannel=fromChannel) for card in cards]), True)])
@@ -604,7 +608,7 @@ def handle_public_message(message, message_text):  # pragma: no cover
 def handle_private_message(message, message_text):  # pragma: no cover
     """Receive a private message from the user and figure out how to respond."""
     logging.debug("Received private message from %s.  Raw text: %s" % (message._client.users[message.body['user']]['real_name'], message.body['text']))
-    if not message_text.startswith("!"):
+    if "!" not in message_text:
         logging.debug("Adding leading !")
         message.body['text'] = "!" + message.body['text']
 

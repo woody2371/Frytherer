@@ -310,7 +310,7 @@ class BotTestCases(unittest.TestCase):
         return
 
     def testFlavour(self):
-        print dispatch_message("!chandra, fl", False)
+        print dispatch_message("!chandra, f", False)
         return
 
     def testGetRandomCard(self):
@@ -349,7 +349,7 @@ class BotTestCases(unittest.TestCase):
                          4698, 4686, 4699, 4760, 4793, 2477, 2535, 2602, 2650, 3287]
         startCount = numbersToSkip[-1]
         file_output = False
-        startCount = 4135
+        startCount = 0 # 4135
         # TODO: 1049 and 1300 :( :( Hopefully won't happen on our Slack
         # 2477 :(
         # TODO: 1498
