@@ -5,10 +5,10 @@
 A Slackbot that handles requests for Oracle text,
 Comprehensive Rules and other such useful garbage
 """
-import random, sys, string
+import random, sys, string, ast
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
-from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe
+from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch
 from slackbot.bot import Bot
 from slackbot.bot import respond_to
 from slackbot.bot import listen_to
@@ -35,7 +35,7 @@ h = HTMLParser()
 # Try open the database
 logging.debug("Opening database connection")
 try:
-    conn = sqlite.connect('frytherer.db', flags=sqlite.SQLITE_OPEN_READONLY, check_same_thread=False)
+    conn = sqlite.connect('frytherer.db', check_same_thread=False)
     conn.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
     conn.row_factory = sqlite.Row
     c = conn.cursor()
@@ -346,7 +346,6 @@ def guessCardName(message, card_tokens):
     logging.debug("Finally, the cards: {}".format(cards_found))
     return cards_found
 
-
 def dispatch_message(incomingMessage, fromChannel):
     """For a message, figure out how to handle it and return the text to reply with.
     The message should probably start with a "!" or at least individual commands within it should.
@@ -493,25 +492,38 @@ def dispatch_message(incomingMessage, fromChannel):
                     ret.extend([("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=True, slackChannel=fromChannel) for card in cards]), True)])
             else:
                 ret.append(("\n".join([printCard(c, card, quick=quick, slackChannel=fromChannel) for card in cards] + ["{} result/s".format(len(cards))]), False))
-        elif message.startswith("r ") or message.startswith("cr ") or message.startswith("rule ") or message.startswith("def ") or message.startswith("define ") or rem:
+        elif message.startswith(("r ","cr ","rule ","def ","define ")) or rem:
             logging.debug("Rules query!")
             if rem:
                 message = rem.group(1)
-            elif message.startswith("r "):
-                message = message[2:]
-            elif message.startswith("cr "):
-                message = message[3:]
-            elif message.startswith("rule "):
-                message = message[5:]
-            elif message.startswith("define "):
-                message = message[7:]
-            elif message.startswith("def "):
-                message = message[4:]
+            message = message.split(' ', 1)[1] #Strip out the command
             rs = ruleSearch(all_rules, message)
             if type(rs) is not list:
                 rs = [rs]
             for r in rs:
                 ret.append((r, False))
+        elif message.startswith(("flavour ","flavor ","ruling ","rulings ")):
+            #remove the command, checking if there is actually a command
+            try:
+                stripped = message.split(' ', 1)[1]
+            except:
+                continue
+            #Grab the command before we strip it
+            command = card_tokens[0]
+            del card_tokens[0] #We have to strip this because the guessCardName function isn't designed for leading commands
+            logging.debug(command + " text!")
+            #Grab the card name
+            cards_found = guessCardName(stripped,card_tokens)
+            if cards_found: #Check if we found anything
+                terms = list(intersperse("OR", cards_found)) #Create our SQL query
+                logging.debug("Searching for {}".format(terms))
+                #Grab card from SQL
+                cards = cardSearch(c, terms)
+                #Rest of this is done in a function in frytherer.py
+                ret = cardExtendSearch(stripped,card_tokens,ret,cards,command)
+            else:
+                #No cards, abort abort!
+                logging.debug("No cards found")
         else:
             cards_found = guessCardName(message, card_tokens)
             if cards_found:

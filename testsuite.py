@@ -308,7 +308,6 @@ class BotTestCases(unittest.TestCase):
 
     def testRulings(self):
         return
-
     def testFlavour(self):
         print dispatch_message("!chandra, f", False)
         return

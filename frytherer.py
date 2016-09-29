@@ -396,7 +396,7 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
                 return prepend + card["name"] + " (" + card["manaCost"] + ")"
             else:
                 squished_rules_text = ""
-                # Do some MODO-like compression of rules text to get it to fit
+                # Do some MODO-likerulings compression of rules text to get it to fit
                 if not ret:
                     squished_rules_text += prepend + card["name"]
                     if "/" in card["manaCost"]:
@@ -499,7 +499,80 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
             for fPrint in foreignNames.items():
                 message_out += fPrint[0] + " : " + fPrint[1] + '\n'
     return message_out.rstrip()
+def cardExtendSearch(stripped,card_tokens,ret,cards,command):
+    #Generic command to search for rules or flavor
+    #Set commands to something we can use to grab shit
+    if command == "ruling":
+        command = "rulings"
+    elif command == "flavour":
+        command = "flavor"
+    #Steal Fry's guessing function
+    logging.debug("Found {} cards".format(len(cards)))
+    #I just use the first result, people have to be exact
+    finalCard = cards[0]
+    #Set all our variables for checking later
+    rulings = []
+    flavor = ""
+    rulingnum = None
+    #The SQL return is a string, but can be eval'd into a list
+    logging.debug("Card is "+finalCard["name"])
+    if command == "rulings":
+        rulings = ast.literal_eval(finalCard["rulings"])
+        #Check for ruling number
+        for s in card_tokens:
+            if(re.match("[0-9]+",s)):
+                rulingnum = int(s) - 1
+                break
+            #Find Fry trying to fuck with us
+            elif(re.match("\-[0-9]+",s)):
+                ret.append(("\n".join(["Go away, Fry."]), False))
+                return ret
+    elif command == "flavor":
+        flavor = finalCard["flavor"]
+    if rulings != [] or flavor != "":
+        #Do we have a ruling number
+        if rulingnum != None:
+            #We do
+            #In case of out of index, try with except
+            try:
+                logging.debug("Returning rule number "+str(rulingnum))
+                ret.append((finalCard["name"]+" - "+rulings[rulingnum]["text"], False))
+                return ret
+            #Out of Index
+            except:
+                logging.debug("That's not a rule!")
+                ret.append((finalCard["name"]+" doesn't have that many rules!", False))
+                return ret                           
 
+        else:
+            #We don't, it could be flavor, or multiple rules
+            if len(rulings) > 1: #Check how many rules. if >1, obviously not flavor
+                logging.debug("No rule number, returning all rules")
+                #Too many rulings, send to PM instead
+                ret.extend([("{} results sent to PM".format(len(rulings)), False), ("\n".join([finalCard["name"]]), True)])
+                rulingstring = ""
+                #Add to string to avoid spam messages
+                for rule in rulings:
+                    rulingstring = rulingstring + "\n" + rule["text"]
+                #Create return string
+                ret.append((rulingstring, True))
+                return ret
+            else: #Could be flavor or ruling with one rule
+                if rulings != []:
+                    logging.debug("No rule number, but only one rule")
+                    string = rulings[0]["text"]
+                else:
+                    logging.debug("Returning Flavor Text")
+                    string = flavor
+                ret.append((finalCard["name"]+" - "+ string, False))
+                return ret
+    else:
+        #No return!
+        if command=="rulings":
+            ret.append((finalCard["name"]+" has no rulings on Gatherer", False))
+        elif command=="flavor":
+            ret.append((finalCard["name"]+" has no flavour!", False))
+        return ret
 
 def ruleSearch(all_rules, rule_to_search):
     """Search the rules of the game.
