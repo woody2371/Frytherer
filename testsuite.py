@@ -307,6 +307,7 @@ class BotTestCases(unittest.TestCase):
         self.assertEqual(dispatch_message("!qs n:Fryland", True)[0], ("No cards found", False))
 
     def testRulings(self):
+        self.assertEqual(dispatch_message("!ruling Bronze Sable", False), ("Bronze Sable has no rulings on Gatherer", False))
         return
     def testFlavour(self):
         print dispatch_message("!chandra, f", False)

@@ -503,24 +503,29 @@ def dispatch_message(incomingMessage, fromChannel):
             for r in rs:
                 ret.append((r, False))
         elif message.startswith(("flavour ","flavor ","ruling ","rulings ")):
-            #remove the command, checking if there is actually a command
-            try:
-                stripped = message.split(' ', 1)[1]
-            except:
-                continue
-            #Grab the command before we strip it
+            #Use regex to put all the parts of the message in accessible parts
             command = card_tokens[0]
-            del card_tokens[0] #We have to strip this because the guessCardName function isn't designed for leading commands
             logging.debug(command + " text!")
-            #Grab the card name
-            cards_found = guessCardName(stripped,card_tokens)
+            match_regex = re.compile(r'^(?P<start_number>\d+){0,1} (?P<name>.+)$|^(?P<name2>.+?)(?:\s+){0,1}(?P<end_number>\d+){0,1}$')
+            if match_regex.match(message.split(' ', 1)[1]):
+                match_dic = match_regex.match(message.split(' ', 1)[1]).groupdict()
+            else:
+                logging.debug("Not a valid command")
+                continue
+            card_dic = {}
+            card_dic["name"] = match_dic["name"] or match_dic["name2"] #Set our final name
+            card_dic["num"] = match_dic["start_number"] or match_dic["end_number"] or None #Set our ruling number
+            card_dic["num"] = int(card_dic["num"])-1
+            logging.debug("Found name {} and ruling number {}".format(card_dic["name"],card_dic["num"]))
+            card_tokens = card_dic['name'].split(' ')
+            cards_found = guessCardName(card_dic['name'], card_tokens[1:])
             if cards_found: #Check if we found anything
                 terms = list(intersperse("OR", cards_found)) #Create our SQL query
                 logging.debug("Searching for {}".format(terms))
                 #Grab card from SQL
                 cards = cardSearch(c, terms)
                 #Rest of this is done in a function in frytherer.py
-                ret = cardExtendSearch(stripped,card_tokens,ret,cards,command)
+                ret = cardExtendSearch(card_dic,command,ret,cards)
             else:
                 #No cards, abort abort!
                 logging.debug("No cards found")
