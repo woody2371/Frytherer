@@ -5,3 +5,5 @@ slackbot
 re2
 cachetools
 pyparsing
+fuzzywuzzy
+python-Levenshtein

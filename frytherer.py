@@ -499,12 +499,10 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
             for fPrint in foreignNames.items():
                 message_out += fPrint[0] + " : " + fPrint[1] + '\n'
     return message_out.rstrip()
-def cardExtendSearch(card_dic, command, ret, cards):
+def cardExtendSearch(matches, command, ret, finalCard):
+    #matches is a dictionary, command is a string, ret is string for returning, finalCard is a dictionary
     #Generic command to search for rules or flavor
     #Steal Fry's guessing function
-    logging.debug("Found {} cards".format(len(cards)))
-    #I just use the first result, people have to be exact
-    finalCard = cards[0]
     #Set all our variables for checking later
     rulings = []
     flavor = ""
@@ -516,17 +514,23 @@ def cardExtendSearch(card_dic, command, ret, cards):
         flavor = finalCard["flavor"]
     if rulings != [] or flavor != "":
         #Do we have a ruling number
-        if card_dic["num"] != None:
+        if matches["num"] != None:
             #We do
             #In case of out of index, try with except
-            try:
-                logging.debug("Returning rule number {}".format(str(card_dic["num"])))
-                ret.append(("{} - {}".format(finalCard["name"],rulings[card_dic["num"]]["text"]), False))
+            if 0 <= matches["num"] < len(rulings):
+                logging.debug("Returning rule number {}".format(str(matches["num"])))
+                ret.append(("{} - {}".format(finalCard["name"], rulings[matches["num"]]["text"]), False))
                 return ret
             #Out of Index
-            except:
+            else:
                 logging.debug("That's not a rule!")
-                ret.append(("{} doesn't have that many rules!".format(finalCard["name"]), False))
+                if len(rulings) == 0:
+                    response = "There are no rulings for this card"
+                elif len(rulings) == 1:
+                    response = "This card only has one ruling"
+                elif len(rulings) > 1:
+                    response = "Valid rulings are 1 - {}".format(len(rulings))
+                ret.append(("That's not a rule for {}! {}".format(finalCard["name"], response), False))
                 return ret                           
 
         else:
@@ -538,7 +542,7 @@ def cardExtendSearch(card_dic, command, ret, cards):
                 rulingstring = ""
                 #Add to string to avoid spam messages
                 for rule in rulings:
-                    rulingstring = "{}\n{}".format(rulingstring,rule["text"])
+                    rulingstring = "{}\n{}".format(rulingstring, rule["text"])
                 #Create return string
                 ret.append((rulingstring, True))
                 return ret
@@ -549,7 +553,7 @@ def cardExtendSearch(card_dic, command, ret, cards):
                 else:
                     logging.debug("Returning Flavor Text")
                     string = flavor
-                ret.append(("{} - {}".format(finalCard["name"],string), False))
+                ret.append(("{} - {}".format(finalCard["name"], string), False))
                 return ret
     else:
         #No return!

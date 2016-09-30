@@ -109,6 +109,7 @@ non_text_regex = re.compile(r'^[^\w]+$')
 #word_starting_with_bang = re.compile(r'[^\w]!(?: *)\w+')
 word_ending_in_bang = re.compile(r'\S+! ')
 word_starting_with_bang = re.compile(r'\s+!(?: *)\S+')
+gathererRuling_regex = re.compile(r'^(?P<start_number>\d+){0,1} (?P<name>.+)$|^(?P<name2>.+?)(?:\s+){0,1}(?P<end_number>\d+){0,1}$')
 
 
 def validate_colon_mode(s, loc, tokens):
@@ -506,29 +507,33 @@ def dispatch_message(incomingMessage, fromChannel):
             #Use regex to put all the parts of the message in accessible parts
             command = card_tokens[0]
             logging.debug(command + " text!")
-            match_regex = re.compile(r'^(?P<start_number>\d+){0,1} (?P<name>.+)$|^(?P<name2>.+?)(?:\s+){0,1}(?P<end_number>\d+){0,1}$')
-            if match_regex.match(message.split(' ', 1)[1]):
-                match_dic = match_regex.match(message.split(' ', 1)[1]).groupdict()
-            else:
+            matches = gathererRuling_regex.match(message.split(' ', 1)[1]).groupdict()
+            matches["name"] = matches.get("name") or matches.get("name2") #Set our final name
+            matches["num"] = matches.get("start_number") or matches.get("end_number") #Set our ruling number
+            if matches["num"] != None:
+                matches["num"] = int(matches["num"])-1 #Because normal people don't think like CS people
+            #Check if we matched anything
+            if matches["name"] == None:
                 logging.debug("Not a valid command")
                 continue
-            card_dic = {}
-            card_dic["name"] = match_dic["name"] or match_dic["name2"] #Set our final name
-            card_dic["num"] = match_dic["start_number"] or match_dic["end_number"] or None #Set our ruling number
-            card_dic["num"] = int(card_dic["num"])-1
-            logging.debug("Found name {} and ruling number {}".format(card_dic["name"],card_dic["num"]))
-            card_tokens = card_dic['name'].split(' ')
-            cards_found = guessCardName(card_dic['name'], card_tokens[1:])
+            else:
+                logging.debug("Valid {} command detected".format(command))
+            logging.debug("Found name {} and ruling number {}".format(matches["name"], matches["num"]))
+            card_tokens = matches['name'].split(' ')
+            cards_found = guessCardName(matches['name'], card_tokens)
             if cards_found: #Check if we found anything
                 terms = list(intersperse("OR", cards_found)) #Create our SQL query
                 logging.debug("Searching for {}".format(terms))
                 #Grab card from SQL
                 cards = cardSearch(c, terms)
+                #I just use the first result, people have to be exact
+                finalCard = cards[0]
                 #Rest of this is done in a function in frytherer.py
-                ret = cardExtendSearch(card_dic,command,ret,cards)
+                ret = cardExtendSearch(matches, command, ret, finalCard)
             else:
                 #No cards, abort abort!
                 logging.debug("No cards found")
+                continue
         else:
             cards_found = guessCardName(message, card_tokens)
             if cards_found:
