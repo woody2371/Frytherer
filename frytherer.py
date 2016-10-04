@@ -502,8 +502,12 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
 
 
 def cardExtendSearch(matches, command, ret, finalCard):
-    """ matches is a dictionary, command is a string, ret is string for returning, finalCard is a dictionary """
-    # Steal Fry's guessing function
+    """ Take a card and command input, and output either the flavor or gatherer rulings of that card
+
+    matches is a list of the matches for our gatherRuling regex, pulling out name and num
+    command is either flavor or ruling, to tell us which to return
+    ret is our return string, to which we should append our text (don't overwrite)
+    finalCard is a dictionary of all the attributes of our card as matched by guessCard."""
     # Set all our variables for checking later
     rulings = []
     flavor = ""
