@@ -524,10 +524,9 @@ def dispatch_message(incomingMessage, fromChannel):
             card_tokens = matches['name'].split(' ')
             cards_found = guessCardName(matches['name'], card_tokens)
             if len(cards_found) == 1:  # Check if we found one thing
-                terms = list(cards_found)  # Create our SQL query
-                logging.debug("Searching for {}".format(terms))
+                logging.debug("Searching for {}".format(cards_found))
                 # Grab card from SQL
-                cards = cardSearch(c, terms)
+                cards = cardSearch(c, cards_foudn)
                 # I just use the first result, people have to be exact
                 # Rest of this is done in a function in frytherer.py, 
                 ret = cardExtendSearch(matches, command, ret, cards[0])
