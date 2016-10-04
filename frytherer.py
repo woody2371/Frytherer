@@ -5,7 +5,7 @@
 This module contains all the helper functions for the
 Frytherer command line interface and the Slackbot
 """
-import string, sys, ast
+import ast, string, sys
 from itertools import product
 from operator import and_, or_
 try:
@@ -499,9 +499,10 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
             for fPrint in foreignNames.items():
                 message_out += fPrint[0] + " : " + fPrint[1] + '\n'
     return message_out.rstrip()
+
+
 def cardExtendSearch(matches, command, ret, finalCard):
-    # matches is a dictionary, command is a string, ret is string for returning, finalCard is a dictionary
-    # Generic command to search for rules or flavor
+    """ matches is a dictionary, command is a string, ret is string for returning, finalCard is a dictionary """
     # Steal Fry's guessing function
     # Set all our variables for checking later
     rulings = []
@@ -514,7 +515,7 @@ def cardExtendSearch(matches, command, ret, finalCard):
         flavor = finalCard["flavor"]
     if rulings != [] or flavor != "":
         # Do we have a ruling number
-        if matches["num"] != None:
+        if matches["num"] is not None:
             # We do
             # In case of out of index, try with except
             if 0 <= matches["num"] < len(rulings):
@@ -534,7 +535,7 @@ def cardExtendSearch(matches, command, ret, finalCard):
                 return ret
         else:
             # We don't, it could be flavor, or multiple rules
-            if len(rulings) > 1:  #Check how many rules. if >1, obviously not flavor
+            if len(rulings) > 1:  # Check how many rules. if >1, obviously not flavor
                 logging.debug("No rule number, returning all rules")
                 # Too many rulings, send to PM instead
                 ret.extend([("{} rulings sent to PM".format(len(rulings)), False), ("\n".join([finalCard["name"]]), True)])
@@ -564,6 +565,7 @@ def cardExtendSearch(matches, command, ret, finalCard):
             ret.append(("{} has no flavour text!".format(finalCard["name"]), False))
         return ret
 
+
 def ruleSearch(all_rules, rule_to_search):
     """Search the rules of the game.
 
@@ -581,7 +583,7 @@ def ruleSearch(all_rules, rule_to_search):
     # print process.extract(rule_to_search, all_rules.keys(), scorer=fuzz.token_set_ratio)
 
     # Just fucken special case it
-    #if rule_to_search == "die":
+    # if rule_to_search == "die":
     #    rule_to_search = "dies"
 
     backup_rule = process.extract(rule_to_search, all_rules.keys(), scorer=fuzz.token_set_ratio)
@@ -600,7 +602,7 @@ def ruleSearch(all_rules, rule_to_search):
                 best = process.extractOne(rule_to_search, all_rules.keys(), scorer=fuzz.token_sort_ratio)
             else:
                 # Give me the highest score, breaking ties by the shortest length
-                best = max(backup_rule, key=lambda x: (x[1], len(x[0])*-1))
+                best = max(backup_rule, key=lambda x: (x[1], len(x[0]) * -1))
             rule_to_search = best[0]
         if "." not in rule_to_search and rule_to_search + ".1" in all_rules:
             # Give them back the one after the heading too

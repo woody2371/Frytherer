@@ -5,7 +5,7 @@
 A Slackbot that handles requests for Oracle text,
 Comprehensive Rules and other such useful garbage
 """
-import random, sys, string, ast
+import random, sys, string
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
 from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch
@@ -347,6 +347,7 @@ def guessCardName(message, card_tokens):
     logging.debug("Finally, the cards: {}".format(cards_found))
     return cards_found
 
+
 def dispatch_message(incomingMessage, fromChannel):
     """For a message, figure out how to handle it and return the text to reply with.
     The message should probably start with a "!" or at least individual commands within it should.
@@ -493,11 +494,11 @@ def dispatch_message(incomingMessage, fromChannel):
                     ret.extend([("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=True, slackChannel=fromChannel) for card in cards]), True)])
             else:
                 ret.append(("\n".join([printCard(c, card, quick=quick, slackChannel=fromChannel) for card in cards] + ["{} result/s".format(len(cards))]), False))
-        elif message.startswith(("r ","cr ","rule ","def ","define ")) or rem:
+        elif message.startswith(("r ", "cr ", "rule ", "def ", "define ")) or rem:
             logging.debug("Rules query!")
             if rem:
                 message = rem.group(1)
-            message = message.split(' ', 1)[1] #Strip out the command
+            message = message.split(' ', 1)[1]  # Strip out the command
             rs = ruleSearch(all_rules, message)
             if type(rs) is not list:
                 rs = [rs]
@@ -511,17 +512,17 @@ def dispatch_message(incomingMessage, fromChannel):
             if matches:
                 matches = matches.groupdict()
             else:
-                logging.debug("No matches, that's strange.") # We should be matching everything
+                logging.debug("No matches, that's strange.")  # We should be matching everything
                 continue
-            matches["name"] = matches.get("name") or matches.get("name2") or matches.get("name3")  #Set our final name
-            if matches["name"] == None:
+            matches["name"] = matches.get("name") or matches.get("name2") or matches.get("name3")  # Set our final name
+            if matches["name"] is None:
                 # There's no valid command. Someone is entering just numbers!
                 logging.debug("Not a valid command. What I received was {}".format(message))
                 continue
             if command.startswith("ruling"):  # Check if it's a ruling, if not why do we need numbers?
-                matches["num"] = matches.get("start_number") or matches.get("end_number")  #Set our ruling number
-                if matches["num"] != None:
-                    matches["num"] = int(matches["num"])-1  # Because normal people don't think like CS people
+                matches["num"] = matches.get("start_number") or matches.get("end_number")  # Set our ruling number
+                if matches["num"] is not None:
+                    matches["num"] = int(matches["num"]) - 1  # Because normal people don't think like CS people
             else:
                 matches["num"] = None
             # Check if we matched anything
@@ -534,9 +535,9 @@ def dispatch_message(incomingMessage, fromChannel):
                 # Grab card from SQL
                 cards = cardSearch(c, cards_found)
                 # I just use the first result, people have to be exact
-                # Rest of this is done in a function in frytherer.py, 
+                # Rest of this is done in a function in frytherer.py
                 ret = cardExtendSearch(matches, command, ret, cards[0])
-            else:  #Either we found 0 or more than one cards
+            else:  # Either we found 0 or more than one cards
                 logging.debug("Found {} cards, returning error".format(len(cards_found)))
                 ret.append(("I found {} cards. Please type exact names.".format(len(cards_found)), False))
                 continue
