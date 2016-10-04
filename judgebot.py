@@ -511,36 +511,29 @@ def dispatch_message(incomingMessage, fromChannel):
             if matches:
                 matches = matches.groupdict()
             else:
-                logging.debug("No matches, that's strange.")
+                logging.debug("No matches, that's strange.") #We should be matching everything
+                continue
             matches["name"] = matches.get("name") or matches.get("name2") or matches.get("name3")  #Set our final name
             if command.startswith("ruling"):  # Check if it's a ruling, if not why do we need numbers?
                 matches["num"] = matches.get("start_number") or matches.get("end_number")  #Set our ruling number
             if matches["num"] != None:
                 matches["num"] = int(matches["num"])-1  # Because normal people don't think like CS people
             # Check if we matched anything
-            if matches["name"] == None:
-                logging.debug("Not a valid command")
-                continue
-            else:
-                logging.debug("Valid {} command detected".format(command))
+            logging.debug("Valid {} command detected".format(command))
             logging.debug("Found name {} and ruling number {}".format(matches["name"], matches["num"]))
             card_tokens = matches['name'].split(' ')
             cards_found = guessCardName(matches['name'], card_tokens)
             if len(cards_found) == 1:  # Check if we found one thing
-                terms = list(intersperse("OR", cards_found))  # Create our SQL query
+                terms = list(cards_found)  # Create our SQL query
                 logging.debug("Searching for {}".format(terms))
                 # Grab card from SQL
                 cards = cardSearch(c, terms)
                 # I just use the first result, people have to be exact
                 # Rest of this is done in a function in frytherer.py, 
                 ret = cardExtendSearch(matches, command, ret, cards[0])
-            elif len(cards_found) > 1:
-                logging.debug("Found too many cards")
+            else:  #Either we found 0 or more than one cards
+                logging.debug("Found {} cards, returning error".format(len(cards_found)))
                 ret.append(("I found {} cards. Please type exact names.".format(len(cards_found)), False))
-                continue
-            else:
-                # No cards, abort abort!
-                logging.debug("No cards found")
                 continue
         else:
             cards_found = guessCardName(message, card_tokens)
