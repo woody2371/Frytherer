@@ -500,28 +500,28 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
                 message_out += fPrint[0] + " : " + fPrint[1] + '\n'
     return message_out.rstrip()
 def cardExtendSearch(matches, command, ret, finalCard):
-    #matches is a dictionary, command is a string, ret is string for returning, finalCard is a dictionary
-    #Generic command to search for rules or flavor
-    #Steal Fry's guessing function
-    #Set all our variables for checking later
+    # matches is a dictionary, command is a string, ret is string for returning, finalCard is a dictionary
+    # Generic command to search for rules or flavor
+    # Steal Fry's guessing function
+    # Set all our variables for checking later
     rulings = []
     flavor = ""
-    #The SQL return is a string, but can be eval'd into a list
+    # The SQL return is a string, but can be eval'd into a list
     logging.debug("Card is {}".format(finalCard["name"]))
     if command.startswith("ruling"):
         rulings = ast.literal_eval(finalCard["rulings"])
     elif command.startswith("flavo"):
         flavor = finalCard["flavor"]
     if rulings != [] or flavor != "":
-        #Do we have a ruling number
+        # Do we have a ruling number
         if matches["num"] != None:
-            #We do
-            #In case of out of index, try with except
+            # We do
+            # In case of out of index, try with except
             if 0 <= matches["num"] < len(rulings):
                 logging.debug("Returning rule number {}".format(str(matches["num"])))
                 ret.append(("{} - {}".format(finalCard["name"], rulings[matches["num"]]["text"]), False))
                 return ret
-            #Out of Index
+            # Out of Index
             else:
                 logging.debug("That's not a rule!")
                 if len(rulings) == 0:
@@ -531,22 +531,21 @@ def cardExtendSearch(matches, command, ret, finalCard):
                 elif len(rulings) > 1:
                     response = "Valid rulings are 1 - {}".format(len(rulings))
                 ret.append(("That's not a rule for {}! {}".format(finalCard["name"], response), False))
-                return ret                           
-
+                return ret
         else:
-            #We don't, it could be flavor, or multiple rules
-            if len(rulings) > 1: #Check how many rules. if >1, obviously not flavor
+            # We don't, it could be flavor, or multiple rules
+            if len(rulings) > 1:  #Check how many rules. if >1, obviously not flavor
                 logging.debug("No rule number, returning all rules")
-                #Too many rulings, send to PM instead
-                ret.extend([("{} results sent to PM".format(len(rulings)), False), ("\n".join([finalCard["name"]]), True)])
+                # Too many rulings, send to PM instead
+                ret.extend([("{} rulings sent to PM".format(len(rulings)), False), ("\n".join([finalCard["name"]]), True)])
                 rulingstring = ""
-                #Add to string to avoid spam messages
+                # Add to string to avoid spam messages
                 for rule in rulings:
                     rulingstring = "{}\n{}".format(rulingstring, rule["text"])
-                #Create return string
+                # Create return string
                 ret.append((rulingstring, True))
                 return ret
-            else: #Could be flavor or ruling with one rule
+            else:  # Could be flavor or ruling with one rule
                 if rulings != []:
                     logging.debug("No rule number, but only one rule")
                     string = rulings[0]["text"]
@@ -556,7 +555,7 @@ def cardExtendSearch(matches, command, ret, finalCard):
                 ret.append(("{} - {}".format(finalCard["name"], string), False))
                 return ret
     else:
-        #No return!
+        # No return!
         if command.startswith("ruling"):
             ret.append(("{} has no rulings on Gatherer".format(finalCard["name"]), False))
         elif command.startswith("flavo"):

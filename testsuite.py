@@ -307,10 +307,10 @@ class BotTestCases(unittest.TestCase):
         self.assertEqual(dispatch_message("!qs n:Fryland", True)[0], ("No cards found", False))
 
     def testRulings(self):
-        self.assertEqual(dispatch_message("!ruling Bronze Sable", False), ("Bronze Sable has no rulings on Gatherer", False))
-        self.assertEqual(dispatch_message("!rulings Nissa, Vastwood Seer", False), ("3 results sent to PM", False))
-        self.assertEqual(dispatch_message("!ruling 1 Nissa, Vastwood Seer", False), ("The ability that triggers when Vastwood Hydra dies doesn’t target any of the creatures. You can choose to put counters on a creature with protection from green, for example. You choose how the counters will be distributed when the ability resolves.", False))
-        self.assertEqual(dispatch_message("!ruling", False), ("", False))
+        self.assertEqual(dispatch_message("!ruling Bronze Sable", False)[0], ("Bronze Sable has no rulings on Gatherer", False))
+        self.assertEqual(dispatch_message("!rulings Nissa, Vastwood Seer", False)[0], ("12 rulings sent to PM", False))
+        self.assertEqual(dispatch_message("!ruling 1 Nissa, Vastwood Seer", False)[0], ("Nissa, Vastwood Seer - Nissa, Vastwood Seer is exiled as a result of her second triggered ability. If she enters the battlefield while you control seven or more lands, she won’t automatically be exiled and transform.", False))
+        self.assertEqual(dispatch_message("!ruling", False)[0], ("", False))
         return
     def testFlavour(self):
         print dispatch_message("!chandra, f", False)

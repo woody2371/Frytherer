@@ -35,7 +35,7 @@ h = HTMLParser()
 # Try open the database
 logging.debug("Opening database connection")
 try:
-    conn = sqlite.connect('frytherer.db', check_same_thread=False)
+    conn = sqlite.connect('frytherer.db', flags=sqlite.SQLITE_OPEN_READONLY, check_same_thread=False)
     conn.text_factory = lambda x: unicode(x, 'utf-8', 'ignore')
     conn.row_factory = sqlite.Row
     c = conn.cursor()
@@ -109,7 +109,7 @@ non_text_regex = re.compile(r'^[^\w]+$')
 #word_starting_with_bang = re.compile(r'[^\w]!(?: *)\w+')
 word_ending_in_bang = re.compile(r'\S+! ')
 word_starting_with_bang = re.compile(r'\s+!(?: *)\S+')
-gathererRuling_regex = re.compile(r'^(?P<start_number>\d+){0,1} (?P<name>.+)$|^(?P<name2>.+?)(?:\s+){0,1}(?P<end_number>\d+){0,1}$')
+gathererRuling_regex = re.compile(r'^(?:(?P<start_number>\d+) (?P<name>.+)|(?P<name2>.*?) ?(?P<end_number>\d+).*?|(?P<name3>.+))')
 
 
 def validate_colon_mode(s, loc, tokens):
@@ -503,16 +503,21 @@ def dispatch_message(incomingMessage, fromChannel):
                 rs = [rs]
             for r in rs:
                 ret.append((r, False))
-        elif message.startswith(("flavour ","flavor ","ruling ","rulings ")):
-            #Use regex to put all the parts of the message in accessible parts
+        elif message.startswith(("flavour ", "flavor ", "ruling ", "rulings ")):
+            # Use regex to put all the parts of the message in accessible parts
             command = card_tokens[0]
             logging.debug(command + " text!")
-            matches = gathererRuling_regex.match(message.split(' ', 1)[1]).groupdict()
-            matches["name"] = matches.get("name") or matches.get("name2") #Set our final name
-            matches["num"] = matches.get("start_number") or matches.get("end_number") #Set our ruling number
+            matches = gathererRuling_regex.match(message.split(' ', 1)[1])
+            if matches:
+                matches = matches.groupdict()
+            else:
+                logging.debug("No matches, that's strange.")
+            matches["name"] = matches.get("name") or matches.get("name2") or matches.get("name3")  #Set our final name
+            if command.startswith("ruling"):  # Check if it's a ruling, if not why do we need numbers?
+                matches["num"] = matches.get("start_number") or matches.get("end_number")  #Set our ruling number
             if matches["num"] != None:
-                matches["num"] = int(matches["num"])-1 #Because normal people don't think like CS people
-            #Check if we matched anything
+                matches["num"] = int(matches["num"])-1  # Because normal people don't think like CS people
+            # Check if we matched anything
             if matches["name"] == None:
                 logging.debug("Not a valid command")
                 continue
@@ -521,17 +526,20 @@ def dispatch_message(incomingMessage, fromChannel):
             logging.debug("Found name {} and ruling number {}".format(matches["name"], matches["num"]))
             card_tokens = matches['name'].split(' ')
             cards_found = guessCardName(matches['name'], card_tokens)
-            if cards_found: #Check if we found anything
-                terms = list(intersperse("OR", cards_found)) #Create our SQL query
+            if len(cards_found) == 1:  # Check if we found one thing
+                terms = list(intersperse("OR", cards_found))  # Create our SQL query
                 logging.debug("Searching for {}".format(terms))
-                #Grab card from SQL
+                # Grab card from SQL
                 cards = cardSearch(c, terms)
-                #I just use the first result, people have to be exact
-                finalCard = cards[0]
-                #Rest of this is done in a function in frytherer.py
-                ret = cardExtendSearch(matches, command, ret, finalCard)
+                # I just use the first result, people have to be exact
+                # Rest of this is done in a function in frytherer.py, 
+                ret = cardExtendSearch(matches, command, ret, cards[0])
+            elif len(cards_found) > 1:
+                logging.debug("Found too many cards")
+                ret.append(("I found {} cards. Please type exact names.".format(len(cards_found)), False))
+                continue
             else:
-                #No cards, abort abort!
+                # No cards, abort abort!
                 logging.debug("No cards found")
                 continue
         else:
