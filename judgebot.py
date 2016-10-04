@@ -109,7 +109,7 @@ non_text_regex = re.compile(r'^[^\w]+$')
 #word_starting_with_bang = re.compile(r'[^\w]!(?: *)\w+')
 word_ending_in_bang = re.compile(r'\S+! ')
 word_starting_with_bang = re.compile(r'\s+!(?: *)\S+')
-gathererRuling_regex = re.compile(r'^(?:(?P<start_number>\d+) (?P<name>.+)|(?P<name2>.*?) ?(?P<end_number>\d+).*?|(?P<name3>.+))')
+gathererRuling_regex = re.compile(r'^(?:(?P<start_number>\d+) ?(?P<name>.+)|(?P<name2>.*?) ?(?P<end_number>\d+).*?|(?P<name3>.+))')
 
 
 def validate_colon_mode(s, loc, tokens):
@@ -511,13 +511,19 @@ def dispatch_message(incomingMessage, fromChannel):
             if matches:
                 matches = matches.groupdict()
             else:
-                logging.debug("No matches, that's strange.") #We should be matching everything
+                logging.debug("No matches, that's strange.") # We should be matching everything
                 continue
             matches["name"] = matches.get("name") or matches.get("name2") or matches.get("name3")  #Set our final name
+            if matches["name"] == None:
+                # There's no valid command. Someone is entering just numbers!
+                logging.debug("Not a valid command. What I received was {}".format(message))
+                continue
             if command.startswith("ruling"):  # Check if it's a ruling, if not why do we need numbers?
                 matches["num"] = matches.get("start_number") or matches.get("end_number")  #Set our ruling number
-            if matches["num"] != None:
-                matches["num"] = int(matches["num"])-1  # Because normal people don't think like CS people
+                if matches["num"] != None:
+                    matches["num"] = int(matches["num"])-1  # Because normal people don't think like CS people
+            else:
+                matches["num"] = None
             # Check if we matched anything
             logging.debug("Valid {} command detected".format(command))
             logging.debug("Found name {} and ruling number {}".format(matches["name"], matches["num"]))
@@ -526,7 +532,7 @@ def dispatch_message(incomingMessage, fromChannel):
             if len(cards_found) == 1:  # Check if we found one thing
                 logging.debug("Searching for {}".format(cards_found))
                 # Grab card from SQL
-                cards = cardSearch(c, cards_foudn)
+                cards = cardSearch(c, cards_found)
                 # I just use the first result, people have to be exact
                 # Rest of this is done in a function in frytherer.py, 
                 ret = cardExtendSearch(matches, command, ret, cards[0])
