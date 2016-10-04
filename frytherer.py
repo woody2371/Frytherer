@@ -541,9 +541,8 @@ def cardExtendSearch(matches, command, ret, finalCard):
                 rulingstring = ""
                 # Add to string to avoid spam messages
                 x = 1  # Number the rulings
-                for rule in rulings:
+                for x, rule in enumerate(rulings, start=1):
                     rulingstring = "{}\n{}. {}".format(rulingstring, x, rule["text"])
-                    x += 1 #Increment our numbering scheme
                 # Create return string
                 rulingstring = "{}\n{}".format(rulingstring, "To show a single ruling in the channel, use the command `!ruling <card> <ruling number>`")
                 ret.append((rulingstring, True))
@@ -553,7 +552,7 @@ def cardExtendSearch(matches, command, ret, finalCard):
                     logging.debug("No rule number, but only one rule")
                     string = rulings[0]["text"]
                 else:
-                    logging.debug("Returning Flavor Text")
+                    logging.debug("Returning Flavour Text")
                     string = flavor
                 ret.append(("{} - {}".format(finalCard["name"], string), False))
                 return ret
@@ -642,7 +641,7 @@ def help():
     ret += "printsets - gives a list of all the sets I know about\n"
     ret += "printsetsinorder - gives a list of all the sets in release date order\n"
     ret += "url <cr|(a)mtr <section>|(a)ipg <section>|<infraction>|jar|peip|pptq|rptq|alldocs> - gives the URL to the requested document\n"
-    ret += "flavor <card> - gives flavor text of a card.\n"
+    ret += "flavour <card> - gives flavour text of a card.\n"
     ret += "ruling <card> [number] - gives a specific Gatherer ruling of a card.\n"
     # ret += "\tallcards <set> - gives a list of all the cards with a given set code (use printsets to get the code)\n"
     # ret += "\tallcardsextend <set> - gives the text of all the cards with a given set code (use printsets to get the code)\n"
