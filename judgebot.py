@@ -209,7 +209,7 @@ def guessCardName(message, card_tokens):
             logging.error("Prefix Check No Punctuation!")
             cards_found.append('en:"{}"'.format(prefix_check_2[0]))
             break
-        listOfCardsToCheck = (prefix_check + prefix_check_2) or allCardNames
+        # TOOD: listOfCardsToCheck = (prefix_check + prefix_check_2) or allCardNames
         if len(card_tokens) == 1 or len(card_tokens) == 2:
             # Check thee legendaries
             legends = process.extract(card_name, allLegendaries, scorer=fuzz.token_set_ratio)
@@ -414,7 +414,7 @@ def dispatch_message(incomingMessage, fromChannel):
             if not cards:
                 return ("No cards found :(", False)
             ret.append((printCard(c, cards[0], quick=False, slackChannel=fromChannel), False))
-        elif len(message_words) > 1 and message_words[1] == "extend":
+        elif len(message_words) > 1 and message_words[-1] == "extend":
             cards = cardSearch(c, ['en:' + message[:-6].rstrip()])
             if not cards:
                 return ("", False)
@@ -498,7 +498,8 @@ def dispatch_message(incomingMessage, fromChannel):
             logging.debug("Rules query!")
             if rem:
                 message = rem.group(1)
-            message = message.split(' ', 1)[1]  # Strip out the command
+            else:
+                message = message.split(' ', 1)[1]  # Strip out the command
             rs = ruleSearch(all_rules, message)
             if type(rs) is not list:
                 rs = [rs]

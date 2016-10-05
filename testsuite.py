@@ -226,6 +226,7 @@ class BotTestCases(unittest.TestCase):
     def testGetCardExtend(self):
         self.assertTrue(tryStartsWith("!island extend", "Island", alone=True))
         self.assertTrue(tryEquals("!fryland extend", "", alone=True))
+        self.assertTrue(len(dispatch_message("!mounted archers extend", False)[0][0]) > 200)
 
     def testGetCardStar(self):
         # Cards are found
@@ -245,7 +246,7 @@ class BotTestCases(unittest.TestCase):
 
         # Between 2 and 5 cards are found
         self.assertTrue("5 result/s" in dispatch_message("!Phyrexian R*", False)[0][0])
-        self.assertTrue(len(dispatch_message("!Phyrexian R*", True)[0][0]) > 50)
+        self.assertTrue(len(dispatch_message("!Phyrexian R*", True)[0][0]) > 100)
 
     def testGetRules(self):
         # FIX: Parsing rules queries in PM when not starting specifically with !r
@@ -268,9 +269,9 @@ class BotTestCases(unittest.TestCase):
         self.assertEqual(dispatch_message("!s en:'Island'", True)[0], (u'*Island* |Basic Land - Island|', False))
         self.assertEqual(dispatch_message("!s en:Island or en:Mountain and not en:Swamp", False)[0], ("Island\n\nBasic Land - Island\nMountain\n\nBasic Land - Mountain\n2 result/s", False))
         self.assertEqual(dispatch_message("!s en:Island or en:Mountain and not en:Swamp", True)[0], ("*Island* |Basic Land - Island|\n*Mountain* |Basic Land - Mountain|", False))
-        self.assertTrue(len(dispatch_message("!s banned:vintage and legal:freeform", False)[0][0]) > 50)
+        self.assertTrue(len(dispatch_message("!s banned:vintage and legal:freeform", False)[0][0]) > 500)
         self.assertEqual(dispatch_message("!s banned:vintage and legal:freeform", True)[0][0], "13 results sent to PM")
-        self.assertTrue(len(dispatch_message("!s banned:vintage and legal:freeform", True)[1][0]) > 50)
+        self.assertTrue(len(dispatch_message("!s banned:vintage and legal:freeform", True)[1][0]) > 200)
 
         # Test brackets and implicit AND
         self.assertTrue(dispatch_message("!s f:modern (n:Cryptic and t:Instant)", False)[0][0].startswith("Cryptic Command"))
@@ -291,9 +292,9 @@ class BotTestCases(unittest.TestCase):
         self.assertEqual(dispatch_message("!qs en:'Island'", True)[0], ("Island ()", False))
         self.assertEqual(dispatch_message("!qs en:Island or en:Mountain and not en:Swamp", False)[0], ("Island ()\nMountain ()\n2 result/s", False))
         self.assertEqual(dispatch_message("!qs en:Island or en:Mountain and not en:Swamp", True)[0], ("Island ()\nMountain ()", False))
-        self.assertTrue(len(dispatch_message("!qs banned:vintage and legal:freeform", False)[0][0]) > 50)
+        self.assertTrue(len(dispatch_message("!qs banned:vintage and legal:freeform", False)[0][0]) > 200)
         self.assertEqual(dispatch_message("!qs banned:vintage and legal:freeform", True)[0][0], "13 results sent to PM")
-        self.assertTrue(len(dispatch_message("!qs banned:vintage and legal:freeform", True)[1][0]) > 50)
+        self.assertTrue(len(dispatch_message("!qs banned:vintage and legal:freeform", True)[1][0]) > 200)
 
         self.assertTrue(dispatch_message("!qs f:modern (n:Cryptic and t:Instant)", False)[0][0].startswith("Cryptic Command"))
         self.assertTrue(dispatch_message("!qs f:modern (n:Cryptic and t:Instant)", True)[0][0].startswith("Cryptic Command"))
@@ -307,9 +308,9 @@ class BotTestCases(unittest.TestCase):
         self.assertEqual(dispatch_message("!qs n:Fryland", True)[0], ("No cards found", False))
 
     def testRulings(self):
-        self.assertEqual(dispatch_message("!ruling Bronze Sable", False)[0], ("Bronze Sable has no rulings on Gatherer", False))
-        self.assertEqual(dispatch_message("!rulings Nissa, Vastwood Seer", False)[0], ("12 rulings sent to PM", False))
-        self.assertEqual(dispatch_message("!ruling 1 Nissa, Vastwood Seer", False)[0], ("Nissa, Vastwood Seer - Nissa, Vastwood Seer is exiled as a result of her second triggered ability. If she enters the battlefield while you control seven or more lands, she won’t automatically be exiled and transform.", False))
+        self.assertEqual(dispatch_message("!ruling bronze sable", False)[0], ("Bronze Sable has no rulings on Gatherer", False))
+        self.assertEqual(dispatch_message("!rulings nissa, vastwood seer", False)[0], ("12 rulings sent to PM", False))
+        self.assertEqual(dispatch_message("!ruling 1 nissa, vastwood seer", False)[0], ("Nissa, Vastwood Seer - Nissa, Vastwood Seer is exiled as a result of her second triggered ability. If she enters the battlefield while you control seven or more lands, she won’t automatically be exiled and transform.", False))
         self.assertEqual(dispatch_message("!ruling", False)[0], ("", False))
         return
 
@@ -322,12 +323,12 @@ class BotTestCases(unittest.TestCase):
         self.assertTrue(len(dispatch_message("!random", True)[0][0]) > 5)
 
     def testPrintSets(self):
-        self.assertTrue(len(dispatch_message("!printsets", False)[0][0]) > 5)
-        self.assertTrue(len(dispatch_message("!printsets", True)[0][0]) > 5)
+        self.assertTrue(len(dispatch_message("!printsets", False)[0][0]) > 500)
+        self.assertTrue(len(dispatch_message("!printsets", True)[0][0]) > 500)
 
     def testPrintSetsInOrder(self):
-        self.assertTrue(len(dispatch_message("!printsetsinorder", False)[0][0]) > 5)
-        self.assertTrue(len(dispatch_message("!printsetsinorder", True)[0][0]) > 5)
+        self.assertTrue(len(dispatch_message("!printsetsinorder", False)[0][0]) > 500)
+        self.assertTrue(len(dispatch_message("!printsetsinorder", True)[0][0]) > 500)
 
     def testDatatog(self):
         try:

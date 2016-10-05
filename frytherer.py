@@ -524,7 +524,7 @@ def cardExtendSearch(matches, command, ret, finalCard):
             # In case of out of index, try with except
             if 0 <= matches["num"] < len(rulings):
                 logging.debug("Returning rule number {}".format(str(matches["num"])))
-                ret.append(("{} - {}".format(finalCard["name"], rulings[matches["num"]]["text"]), False))
+                ret.append(("{} - {}".format(finalCard["name"], rulings[matches["num"]]["text"].encode('utf-8')), False))
                 return ret
             # Out of Index
             else:
@@ -545,11 +545,10 @@ def cardExtendSearch(matches, command, ret, finalCard):
                 ret.extend([("{} rulings sent to PM".format(len(rulings)), False), ("\n".join([finalCard["name"]]), True)])
                 rulingstring = ""
                 # Add to string to avoid spam messages
-                x = 1  # Number the rulings
-                for x, rule in enumerate(rulings, start=1):
-                    rulingstring = "{}\n{}. {}".format(rulingstring, x, rule["text"])
+                for (x, rule) in enumerate(rulings, start=1):
+                    rulingstring += "\n{}. {}".format(x, rule["text"].encode('utf-8'))
                 # Create return string
-                rulingstring = "{}\n{}".format(rulingstring, "To show a single ruling in the channel, use the command `!ruling <card> <ruling number>`")
+                rulingstring += "\n{}".format("To show a single ruling in the channel, use the command `!ruling <card> <ruling number>`")
                 ret.append((rulingstring, True))
                 return ret
             else:  # Could be flavor or ruling with one rule
@@ -559,7 +558,7 @@ def cardExtendSearch(matches, command, ret, finalCard):
                 else:
                     logging.debug("Returning Flavour Text")
                     string = flavor
-                ret.append(("{} - {}".format(finalCard["name"], string), False))
+                ret.append(("{} - {}".format(finalCard["name"], string.encode('utf-8')), False))
                 return ret
     else:
         # No return!
