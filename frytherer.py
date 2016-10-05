@@ -5,7 +5,7 @@
 This module contains all the helper functions for the
 Frytherer command line interface and the Slackbot
 """
-import string, sys, ast
+import ast, string, sys
 from itertools import product
 from operator import and_, or_
 try:
@@ -501,6 +501,75 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
     return message_out.rstrip()
 
 
+def cardExtendSearch(matches, command, ret, finalCard):
+    """ Take a card and command input, and output either the flavor or gatherer rulings of that card
+
+    matches is a list of the matches for our gatherRuling regex, pulling out name and num
+    command is either flavor or ruling, to tell us which to return
+    ret is our return string, to which we should append our text (don't overwrite)
+    finalCard is a dictionary of all the attributes of our card as matched by guessCard."""
+    # Set all our variables for checking later
+    rulings = []
+    flavor = ""
+    # The SQL return is a string, but can be eval'd into a list
+    logging.debug("Card is {}".format(finalCard["name"]))
+    if command.startswith("ruling"):
+        rulings = ast.literal_eval(finalCard["rulings"])
+    elif command.startswith("flavo"):
+        flavor = finalCard["flavor"]
+    if rulings != [] or flavor != "":
+        # Do we have a ruling number
+        if matches["num"] is not None:
+            # We do
+            # In case of out of index, try with except
+            if 0 <= matches["num"] < len(rulings):
+                logging.debug("Returning rule number {}".format(str(matches["num"])))
+                ret.append(("{} - {}".format(finalCard["name"], rulings[matches["num"]]["text"]), False))
+                return ret
+            # Out of Index
+            else:
+                logging.debug("That's not a rule!")
+                if len(rulings) == 0:
+                    response = "There are no rulings for this card"
+                elif len(rulings) == 1:
+                    response = "This card only has one ruling"
+                elif len(rulings) > 1:
+                    response = "Valid rulings are 1 - {}".format(len(rulings))
+                ret.append(("That's not a rule for {}! {}".format(finalCard["name"], response), False))
+                return ret
+        else:
+            # We don't, it could be flavor, or multiple rules
+            if len(rulings) > 1:  # Check how many rules. if >1, obviously not flavor
+                logging.debug("No rule number, returning all rules")
+                # Too many rulings, send to PM instead
+                ret.extend([("{} rulings sent to PM".format(len(rulings)), False), ("\n".join([finalCard["name"]]), True)])
+                rulingstring = ""
+                # Add to string to avoid spam messages
+                x = 1  # Number the rulings
+                for x, rule in enumerate(rulings, start=1):
+                    rulingstring = "{}\n{}. {}".format(rulingstring, x, rule["text"])
+                # Create return string
+                rulingstring = "{}\n{}".format(rulingstring, "To show a single ruling in the channel, use the command `!ruling <card> <ruling number>`")
+                ret.append((rulingstring, True))
+                return ret
+            else:  # Could be flavor or ruling with one rule
+                if rulings != []:
+                    logging.debug("No rule number, but only one rule")
+                    string = rulings[0]["text"]
+                else:
+                    logging.debug("Returning Flavour Text")
+                    string = flavor
+                ret.append(("{} - {}".format(finalCard["name"], string), False))
+                return ret
+    else:
+        # No return!
+        if command.startswith("ruling"):
+            ret.append(("{} has no rulings on Gatherer".format(finalCard["name"]), False))
+        elif command.startswith("flavo"):
+            ret.append(("{} has no flavour text!".format(finalCard["name"]), False))
+        return ret
+
+
 def ruleSearch(all_rules, rule_to_search):
     """Search the rules of the game.
 
@@ -518,7 +587,7 @@ def ruleSearch(all_rules, rule_to_search):
     # print process.extract(rule_to_search, all_rules.keys(), scorer=fuzz.token_set_ratio)
 
     # Just fucken special case it
-    #if rule_to_search == "die":
+    # if rule_to_search == "die":
     #    rule_to_search = "dies"
 
     backup_rule = process.extract(rule_to_search, all_rules.keys(), scorer=fuzz.token_set_ratio)
@@ -537,7 +606,7 @@ def ruleSearch(all_rules, rule_to_search):
                 best = process.extractOne(rule_to_search, all_rules.keys(), scorer=fuzz.token_sort_ratio)
             else:
                 # Give me the highest score, breaking ties by the shortest length
-                best = max(backup_rule, key=lambda x: (x[1], len(x[0])*-1))
+                best = max(backup_rule, key=lambda x: (x[1], len(x[0]) * -1))
             rule_to_search = best[0]
         if "." not in rule_to_search and rule_to_search + ".1" in all_rules:
             # Give them back the one after the heading too
@@ -578,6 +647,8 @@ def help():
     ret += "printsets - gives a list of all the sets I know about\n"
     ret += "printsetsinorder - gives a list of all the sets in release date order\n"
     ret += "url <cr|(a)mtr <section>|(a)ipg <section>|<infraction>|jar|peip|pptq|rptq|alldocs> - gives the URL to the requested document\n"
+    ret += "flavour <card> - gives flavour text of a card.\n"
+    ret += "ruling <card> [number] - gives a specific Gatherer ruling of a card.\n"
     # ret += "\tallcards <set> - gives a list of all the cards with a given set code (use printsets to get the code)\n"
     # ret += "\tallcardsextend <set> - gives the text of all the cards with a given set code (use printsets to get the code)\n"
     # ret += "\tbooster <set> - gives a randomly generated booster from either set code, or set name\n"

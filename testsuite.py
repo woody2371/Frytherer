@@ -307,6 +307,10 @@ class BotTestCases(unittest.TestCase):
         self.assertEqual(dispatch_message("!qs n:Fryland", True)[0], ("No cards found", False))
 
     def testRulings(self):
+        self.assertEqual(dispatch_message("!ruling Bronze Sable", False)[0], ("Bronze Sable has no rulings on Gatherer", False))
+        self.assertEqual(dispatch_message("!rulings Nissa, Vastwood Seer", False)[0], ("12 rulings sent to PM", False))
+        self.assertEqual(dispatch_message("!ruling 1 Nissa, Vastwood Seer", False)[0], ("Nissa, Vastwood Seer - Nissa, Vastwood Seer is exiled as a result of her second triggered ability. If she enters the battlefield while you control seven or more lands, she won’t automatically be exiled and transform.", False))
+        self.assertEqual(dispatch_message("!ruling", False)[0], ("", False))
         return
 
     def testFlavour(self):
@@ -349,7 +353,7 @@ class BotTestCases(unittest.TestCase):
                          4698, 4686, 4699, 4760, 4793, 2477, 2535, 2602, 2650, 3287]
         startCount = numbersToSkip[-1]
         file_output = False
-        startCount = 0 # 4135
+        startCount = 0  # 4135
         # TODO: 1049 and 1300 :( :( Hopefully won't happen on our Slack
         # 2477 :(
         # TODO: 1498

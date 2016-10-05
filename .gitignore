@@ -5,3 +5,4 @@ slackbot_settings.py
 frytherer.db
 *.pyc
 .coverage
+mtgrulesdict.py

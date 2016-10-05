@@ -8,7 +8,7 @@ Comprehensive Rules and other such useful garbage
 import random, sys, string
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
-from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe
+from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch
 from slackbot.bot import Bot
 from slackbot.bot import respond_to
 from slackbot.bot import listen_to
@@ -105,10 +105,11 @@ bot_command_regex = re.compile(r'[!&]([^!&]+)')
 single_quoted_word = re.compile(r'^(?:\"|\')\w+(?:\"|\')$')
 split_card_regex = re.compile(r'(.*?)\s*//\s*(.*)')
 non_text_regex = re.compile(r'^[^\w]+$')
-#word_ending_in_bang = re.compile(r'\w+! ')
-#word_starting_with_bang = re.compile(r'[^\w]!(?: *)\w+')
+# word_ending_in_bang = re.compile(r'\w+! ')
+# word_starting_with_bang = re.compile(r'[^\w]!(?: *)\w+')
 word_ending_in_bang = re.compile(r'\S+! ')
 word_starting_with_bang = re.compile(r'\s+!(?: *)\S+')
+gathererRuling_regex = re.compile(r'^(?:(?P<start_number>\d+) ?(?P<name>.+)|(?P<name2>.*?) ?(?P<end_number>\d+).*?|(?P<name3>.+))')
 
 
 def validate_colon_mode(s, loc, tokens):
@@ -493,25 +494,53 @@ def dispatch_message(incomingMessage, fromChannel):
                     ret.extend([("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=True, slackChannel=fromChannel) for card in cards]), True)])
             else:
                 ret.append(("\n".join([printCard(c, card, quick=quick, slackChannel=fromChannel) for card in cards] + ["{} result/s".format(len(cards))]), False))
-        elif message.startswith("r ") or message.startswith("cr ") or message.startswith("rule ") or message.startswith("def ") or message.startswith("define ") or rem:
+        elif message.startswith(("r ", "cr ", "rule ", "def ", "define ")) or rem:
             logging.debug("Rules query!")
             if rem:
                 message = rem.group(1)
-            elif message.startswith("r "):
-                message = message[2:]
-            elif message.startswith("cr "):
-                message = message[3:]
-            elif message.startswith("rule "):
-                message = message[5:]
-            elif message.startswith("define "):
-                message = message[7:]
-            elif message.startswith("def "):
-                message = message[4:]
+            message = message.split(' ', 1)[1]  # Strip out the command
             rs = ruleSearch(all_rules, message)
             if type(rs) is not list:
                 rs = [rs]
             for r in rs:
                 ret.append((r, False))
+        elif message.startswith(("flavour ", "flavor ", "ruling ", "rulings ")):
+            # Use regex to put all the parts of the message in accessible parts
+            command = card_tokens[0]
+            logging.debug(command + " text!")
+            matches = gathererRuling_regex.match(message.split(' ', 1)[1])
+            if matches:
+                matches = matches.groupdict()
+            else:
+                logging.debug("No matches, that's strange.")  # We should be matching everything
+                continue
+            matches["name"] = matches.get("name") or matches.get("name2") or matches.get("name3")  # Set our final name
+            if matches["name"] is None:
+                # There's no valid command. Someone is entering just numbers!
+                logging.debug("Not a valid command. What I received was {}".format(message))
+                continue
+            if command.startswith("ruling"):  # Check if it's a ruling, if not why do we need numbers?
+                matches["num"] = matches.get("start_number") or matches.get("end_number")  # Set our ruling number
+                if matches["num"] is not None:
+                    matches["num"] = int(matches["num"]) - 1  # Because normal people don't think like CS people
+            else:
+                matches["num"] = None
+            # Check if we matched anything
+            logging.debug("Valid {} command detected".format(command))
+            logging.debug("Found name {} and ruling number {}".format(matches["name"], matches["num"]))
+            card_tokens = matches['name'].split(' ')
+            cards_found = guessCardName(matches['name'], card_tokens)
+            if len(cards_found) == 1:  # Check if we found one thing
+                logging.debug("Searching for {}".format(cards_found))
+                # Grab card from SQL
+                cards = cardSearch(c, cards_found)
+                # I just use the first result, people have to be exact
+                # Rest of this is done in a function in frytherer.py
+                ret = cardExtendSearch(matches, command, ret, cards[0])
+            else:  # Either we found 0 or more than one cards
+                logging.debug("Found {} cards, returning error".format(len(cards_found)))
+                ret.append(("I found {} cards. Please type exact names.".format(len(cards_found)), False))
+                continue
         else:
             cards_found = guessCardName(message, card_tokens)
             if cards_found:
