@@ -454,9 +454,9 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
                 message_out += ", ".join(colors) + (" " if slackChannel else '\n')
         else:
             message_out += ", ".join(colors) + ("" if slackChannel else '\n')
-        message_out += ("|" if slackChannel else "") + " ".join(supertypes) + (" " if supertypes else "") + " ".join(types) + (" - " if subtypes else "") + " ".join(subtypes) + ("| " if slackChannel else '\n')
-        if "Creature" in types:
-            message_out += card["power"] + "/" + card["toughness"] + (" " if slackChannel else '\n')
+        message_out += ("| " if slackChannel else "") + " ".join(supertypes) + (" " if supertypes else "") + " ".join(types) + (" - " if subtypes else "") + " ".join(subtypes) + (" | " if slackChannel else '\n')
+        if "Creature" in types or "Vehicle" in subtypes:
+            message_out += card["power"] + "/" + card["toughness"] + (" | " if slackChannel else '\n')
         if "Planeswalker" in types:
             message_out += "[" + str(card["loyalty"]) + "]" + ("  " if slackChannel else '\n')
         if slackChannel:
