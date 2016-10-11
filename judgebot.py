@@ -409,9 +409,25 @@ def dispatch_message(incomingMessage, fromChannel):
                 try:
                     flip = random.randint(1, int(message[1:]))
                 except:
-                    ret.append("Error rolling die", False)
                     logging.error(sys.exc_info())
+                    return ("Error rolling die", False)
                 ret.append((str(flip) + (" - CRIT! :D" if flip == 20 else ""), False))
+        elif message_words[0] in ["mo", "jho", "sto"]:
+            try:
+                cmc = str(int(message_words[1]))
+            except:
+                logging.error(sys.exc_info())
+                return ("Unable to parse CMC", False)
+            cards = None
+            if message_words[0] == "mo":
+                cards = cardSearch(c, ['t:creature', 'AND', 'cmc:' + cmc, 'AND', 'NOT', '(', 'set:UGL', 'OR', 'set:UNH', ')'], limit=1, random=True)
+            elif message_words[0] == "jho":
+                cards = cardSearch(c, ['t:instant', 'AND', 'cmc:' + cmc, 'AND', 'NOT', '(', 'set:UGL', 'OR', 'set:UNH', ')'], limit=3, random=True) + cardSearch(c, ['t:sorcery', 'AND', 'cmc:' + cmc, 'AND', 'NOT', '(', 'set:UGL', 'OR', 'set:UNH', ')'], limit=3, random=True)
+            elif message_words[0] == "sto":
+                cards = cardSearch(c, ['t:equipment', 'AND', 'cmc<' + cmc, 'AND', 'NOT', '(', 'set:UGL', 'OR', 'set:UNH', ')'], limit=1, random=True)
+            if not cards:
+                return ("No cards found :(", False)
+            ret.append(("\n".join([printCard(c, card, quick=True, slackChannel=fromChannel) for card in cards]), False))
         elif message in ["alldocs", "mt", "missed trigger", "l@ec", "looking at extra cards", "hce", "hidden card error", "mpe", "mulligan procedure error", "grv", "game rule violation", "ftmgs", "failure to maintain game state", "tardiness", "oa", "outside assistance", "slow play", "insufficient shuffling", "ddlp", "deck/decklist problem", "lpv", "limited procedure violation", "cpv", "communication policy violation", "mc", "marked cards", "usc minor", "usc major", "idaw", "improperly determining a winner", "bribery", "ab", "aggressive behaviour", "totm", "theft of tournament material", "stalling", "cheating"] or message.startswith("alldocs ") or message[0:4] in ["url ", "mtr ", "ipg ", "mtr", "ipg", "amtr", "aipg", "jar", "jar ", "peip", "pptq", "rptq"]:
             ret.append((url(message), False))
         elif message.startswith("printsets"):

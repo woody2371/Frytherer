@@ -120,18 +120,27 @@ def calculateCMC(manaCost):
     return cmc
 
 
-def cardSearch(cursor, terms):
+class safelist(list):
+    def get(self, index, default=None):
+        try:
+            return self.__getitem__(index)
+        except IndexError:
+            return default
+
+
+def cardSearch(cursor, t, limit=None, random=False):
     """Search the database for cards.
 
     TODO: Parameterise the rest of this
     INPUT: Terms to search for, and the database cursor
     OUTPT: Card objects (if found)
     """
+    terms = safelist(t)
     params = []
     sql_query = "SELECT * FROM CARDS WHERE "
     do_later = []
     was_not = False
-    for term in terms:
+    for (idx, term) in enumerate(terms):
         if type(term) is not unicode:
             term = term.decode('utf-8')
         logging.debug("Processing term {}".format(term.encode("utf-8")))
@@ -139,8 +148,10 @@ def cardSearch(cursor, terms):
         if term.lower() in ["and", "or", "(", ")"]:
             sql_query += " " + term.upper() + " "
         if term.lower() == "not":
-            sql_query += " NOT("
-            was_not = True
+            sql_query += " NOT"
+            if terms.get(idx + 1, "") != "(":
+                sql_query += "("
+                was_not = True
         else:
             if term.startswith("banned:"):
                 sql_query += "legalities LIKE ?"
@@ -288,6 +299,10 @@ def cardSearch(cursor, terms):
     if sql_query.endswith("AND ") or sql_query.endswith("WHERE "):
         sql_query += "1=1"
     sql_query += " GROUP BY name"
+    if random:
+        sql_query += " ORDER BY RANDOM()"
+    if limit:
+        sql_query += " LIMIT {}".format(limit)
     logging.debug(sql_query)
     logging.debug(params)
     for (idx, param) in enumerate(params):
@@ -653,6 +668,7 @@ def help():
     # ret += "\tbooster <set> - gives a randomly generated booster from either set code, or set name\n"
     # ret += "\tqbooster <set> - gives a randomly generated booster from either set code, or set name, short names\n"
     ret += "d6|d20|coin - flips or rolls the appropriate randomisation instrument.\n"
+    ret += "mo|jho|sto <X> - rolls you a Momir/Jhoira/Stonehewer Giant activation for CMC X\n"
     ret += "help - prints this help\n"
     ret += "Any bugs, questions, or suggestions - ask Fry!\n"
     return ret

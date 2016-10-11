@@ -108,7 +108,7 @@ class FrythererTestCases(unittest.TestCase):
         self.assertEqual(doubleQuotedIsland['name'], "Island")
         only_two_basics = cardSearch(self.c, "en:Island or en:Mountain and not en:Swamp".split(' '))
         self.assertEqual(len(only_two_basics), 2)
-        conspiracies = cardSearch(self.c, "banned:vintage and legal:freeform".split(' '))
+        conspiracies = cardSearch(self.c, "banned:vintage and t:conspiracy".split(' '))
         self.assertTrue(len(conspiracies) > 0)
         trinisphere = cardSearch(self.c, "restricted:vintage and set:dst and cn:154".split(' '))[0]
         self.assertEqual(trinisphere['name'], "Trinisphere")
@@ -269,9 +269,9 @@ class BotTestCases(unittest.TestCase):
         self.assertEqual(dispatch_message("!s en:'Island'", True)[0], (u'*Island* |Basic Land - Island|', False))
         self.assertEqual(dispatch_message("!s en:Island or en:Mountain and not en:Swamp", False)[0], ("Island\n\nBasic Land - Island\nMountain\n\nBasic Land - Mountain\n2 result/s", False))
         self.assertEqual(dispatch_message("!s en:Island or en:Mountain and not en:Swamp", True)[0], ("*Island* |Basic Land - Island|\n*Mountain* |Basic Land - Mountain|", False))
-        self.assertTrue(len(dispatch_message("!s banned:vintage and legal:freeform", False)[0][0]) > 500)
-        self.assertEqual(dispatch_message("!s banned:vintage and legal:freeform", True)[0][0], "13 results sent to PM")
-        self.assertTrue(len(dispatch_message("!s banned:vintage and legal:freeform", True)[1][0]) > 200)
+        self.assertTrue(len(dispatch_message("!s banned:vintage and t:conspiracy", False)[0][0]) > 500)
+        self.assertEqual(dispatch_message("!s banned:vintage and t:conspiracy", True)[0][0], "13 results sent to PM")
+        self.assertTrue(len(dispatch_message("!s banned:vintage and t:conspiracy", True)[1][0]) > 200)
 
         # Test brackets and implicit AND
         self.assertTrue(dispatch_message("!s f:modern (n:Cryptic and t:Instant)", False)[0][0].startswith("Cryptic Command"))
@@ -292,14 +292,16 @@ class BotTestCases(unittest.TestCase):
         self.assertEqual(dispatch_message("!qs en:'Island'", True)[0], ("Island ()", False))
         self.assertEqual(dispatch_message("!qs en:Island or en:Mountain and not en:Swamp", False)[0], ("Island ()\nMountain ()\n2 result/s", False))
         self.assertEqual(dispatch_message("!qs en:Island or en:Mountain and not en:Swamp", True)[0], ("Island ()\nMountain ()", False))
-        self.assertTrue(len(dispatch_message("!qs banned:vintage and legal:freeform", False)[0][0]) > 200)
-        self.assertEqual(dispatch_message("!qs banned:vintage and legal:freeform", True)[0][0], "13 results sent to PM")
-        self.assertTrue(len(dispatch_message("!qs banned:vintage and legal:freeform", True)[1][0]) > 200)
+        self.assertTrue(len(dispatch_message("!qs banned:vintage and t:conspiracy", False)[0][0]) > 200)
+        self.assertEqual(dispatch_message("!qs banned:vintage and t:conspiracy", True)[0][0], "13 results sent to PM")
+        self.assertTrue(len(dispatch_message("!qs banned:vintage and t:conspiracy", True)[1][0]) > 200)
 
         self.assertTrue(dispatch_message("!qs f:modern (n:Cryptic and t:Instant)", False)[0][0].startswith("Cryptic Command"))
         self.assertTrue(dispatch_message("!qs f:modern (n:Cryptic and t:Instant)", True)[0][0].startswith("Cryptic Command"))
         self.assertTrue(dispatch_message("!qs f:modern n:Cryptic t:Instant", False)[0][0].startswith("Cryptic Command"))
         self.assertTrue(dispatch_message("!qs f:modern n:Cryptic t:Instant", True)[0][0].startswith("Cryptic Command"))
+
+        self.assertTrue(dispatch_message("!qs t:Instant and n:Cryptic and not (set:UNH or set:UGL)", True)[0][0].startswith("Cryptic Command"))
 
         # Should be failures
         self.assertTrue(dispatch_message("!qs n=Island", False)[0][0].startswith("Unable to parse search terms"))
@@ -329,6 +331,20 @@ class BotTestCases(unittest.TestCase):
     def testPrintSetsInOrder(self):
         self.assertTrue(len(dispatch_message("!printsetsinorder", False)[0][0]) > 500)
         self.assertTrue(len(dispatch_message("!printsetsinorder", True)[0][0]) > 500)
+
+    def testCoinFlip(self):
+        self.assertTrue(dispatch_message("!coin", False)[0][0] in ["Heads", "Tails"])
+        self.assertTrue(dispatch_message("!coin", True)[0][0] in ["Heads", "Tails"])
+        self.assertTrue(int(dispatch_message("!d6", False)[0][0]) in range(1, 7))
+        self.assertTrue(int(dispatch_message("!d6", True)[0][0]) in range(1, 7))
+        self.assertTrue(int(dispatch_message("!d20", False)[0][0]) in xrange(1, 21))
+        self.assertTrue(int(dispatch_message("!d20", True)[0][0]) in xrange(1, 21))
+
+    def testMoJhoSto(self):
+        self.assertTrue((dispatch_message("!mo 6", False)[0][0]).count("(") == 1)
+        self.assertTrue((dispatch_message("!mo 6", True)[0][0]).count("(") == 1)
+        self.assertTrue((dispatch_message("!jho 6", False)[0][0]).count("(") == 6)
+        self.assertTrue((dispatch_message("!jho 6", True)[0][0]).count("(") == 6)
 
     def testDatatog(self):
         try:
