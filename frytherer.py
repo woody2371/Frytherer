@@ -635,7 +635,7 @@ def ruleSearch(all_rules, rule_to_search):
 def help():
     """Print out help message."""
     ret = ""
-    ret += "Welcome to Frytherer.  Your options are:\n"
+    ret += "Welcome to Frytherer.  Commands should start with a '!'.  Your options are:\n"
     ret += "<card name> - gives what's on the card\n"
     ret += "<card name> extend - gives extended info about the card (everything - rulings, legality, artist, flavour text, foreign names)\n"
     ret += "<card name>* - search card names\n"
@@ -652,6 +652,7 @@ def help():
     # ret += "\tallcardsextend <set> - gives the text of all the cards with a given set code (use printsets to get the code)\n"
     # ret += "\tbooster <set> - gives a randomly generated booster from either set code, or set name\n"
     # ret += "\tqbooster <set> - gives a randomly generated booster from either set code, or set name, short names\n"
+    ret += "d6|d20|coin - flips or rolls the appropriate randomisation instrument.\n"
     ret += "help - prints this help\n"
     ret += "Any bugs, questions, or suggestions - ask Fry!\n"
     return ret

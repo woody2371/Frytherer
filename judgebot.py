@@ -411,7 +411,7 @@ def dispatch_message(incomingMessage, fromChannel):
                 except:
                     ret.append("Error rolling die", False)
                     logging.error(sys.exc_info())
-                ret.append((str(flip), False))
+                ret.append((str(flip) + (" - CRIT! :D" if flip == 20 else ""), False))
         elif message in ["alldocs", "mt", "missed trigger", "l@ec", "looking at extra cards", "hce", "hidden card error", "mpe", "mulligan procedure error", "grv", "game rule violation", "ftmgs", "failure to maintain game state", "tardiness", "oa", "outside assistance", "slow play", "insufficient shuffling", "ddlp", "deck/decklist problem", "lpv", "limited procedure violation", "cpv", "communication policy violation", "mc", "marked cards", "usc minor", "usc major", "idaw", "improperly determining a winner", "bribery", "ab", "aggressive behaviour", "totm", "theft of tournament material", "stalling", "cheating"] or message.startswith("alldocs ") or message[0:4] in ["url ", "mtr ", "ipg ", "mtr", "ipg", "amtr", "aipg", "jar", "jar ", "peip", "pptq", "rptq"]:
             ret.append((url(message), False))
         elif message.startswith("printsets"):
