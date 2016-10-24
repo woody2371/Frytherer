@@ -394,6 +394,28 @@ def cardSearch(cursor, t, limit=None, random=False):
         return cards
 
 
+def printHSCard(cursor, cardname):
+    """Given a hearthstone card name, return a string"""
+    logging.debug(cardname)
+    card = cursor.execute("SELECT * FROM hearthstonecards WHERE name = ?", (cardname.title(),)).fetchone()
+    message_out = ""
+    if card:
+        message_out += "*" + card["name"] + "* | "
+        message_out += "{" + str(card["cost"]) + "}" + " | "
+        message_out += card["type"] + (" (" + card["race"] + ")" if card["race"] else "") + " | "
+        if card["type"] == "Weapon":
+            message_out += str(card["attack"]) + "/" + str(card["durability"]) + " | "
+        elif card["type"] == "Minion":
+            message_out += str(card["attack"]) + "/" + str(card["health"]) + " | "
+        if card["text"]:
+            message_out += card["text"].replace("<b>", "").replace("</b>", "").replace("<i>", "_").replace("</i>", "_").replace('\n', ' ').replace("[x]", "").replace("$", "") + " | "
+        #if card["mechanics"]:
+        #    message_out += card["mechanics"].title() + " | "
+    else:
+        message_out = "Card not found!?"
+    return message_out
+
+
 def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=False, slackChannel=False):
     """Given a card, return a formatted string fit for purpose."""
     types = ast.literal_eval(card["types"])
@@ -669,6 +691,7 @@ def help():
     # ret += "\tqbooster <set> - gives a randomly generated booster from either set code, or set name, short names\n"
     ret += "d6|d20|coin - flips or rolls the appropriate randomisation instrument.\n"
     ret += "mo|jho|sto <X> - rolls you a Momir/Jhoira/Stonehewer Giant activation for CMC X\n"
+    ret += "hs <card name> - Print out the requested Hearthstone Card\n"
     ret += "help - prints this help\n"
     ret += "Any bugs, questions, or suggestions - ask Fry!\n"
     return ret

@@ -8,7 +8,7 @@ Comprehensive Rules and other such useful garbage
 import random, sys, string
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
-from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch
+from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard
 from slackbot.bot import Bot
 from slackbot.bot import respond_to
 from slackbot.bot import listen_to
@@ -49,6 +49,11 @@ try:
     allCardNames = [y[0].lower() for y in c.fetchall()]
     numCards = len(allCardNames)
     logging.debug("Found %d cards" % numCards)
+
+    c.execute('SELECT DISTINCT(name) FROM hearthstonecards')
+    allHSCardNames = [y[0].lower() for y in c.fetchall()]
+    numHSCards = len(allHSCardNames)
+    logging.debug("Also found %d Hearthstone Cards" % numHSCards)
 except sqlite.OperationalError:  # pragma: no cover
     logging.error("No cards in DB? Try running dbimport.py")
     sys.exit(1)
@@ -401,6 +406,9 @@ def dispatch_message(incomingMessage, fromChannel):
             ret.append((help(), True))
         elif message_words[0] == "helpsearch":
             ret.append((helpsearch(), True))
+        elif message_words[0] == "hs" and len(message_words) > 1:
+            if message[3:] in allHSCardNames:
+                ret.append((printHSCard(c, message[3:]), False))
         elif message in ["d6", "d20", "coin"]:
             if message == "coin":
                 flip = random.randint(0, 1)

@@ -98,3 +98,49 @@ if __name__ == '__main__':
         c.execute('CREATE INDEX cardrarityindex ON cards (rarity)')
         c.execute('CREATE INDEX cardtypesindex ON cards (types)')
         conn.commit()
+
+    numCards = -1
+
+    # Check if the database actually has stuff
+    try:
+        c.execute('SELECT COUNT(DISTINCT(name)) FROM hearthstonecards')
+        numCards = c.fetchone()[0]
+    except sqlite.OperationalError:
+        print "No cards in DB? Trying to import"
+        numCards = 0
+
+    if numCards < 1:
+        # Load in all the cards
+        try:
+            with open('cards.json') as data_file:
+                hs_cards = json.load(data_file)
+        except IOError:
+            print "Unable to import cards - goodbye"
+            sys.exit(0)
+        c.execute("DROP TABLE IF EXISTS hearthstonecards")
+
+        c.execute("""
+            CREATE TABLE hearthstonecards (
+                id TEXT PRIMARY KEY UNIQUE,
+                name TEXT,
+                text TEXT,
+                rarity TEXT,
+                type TEXT,
+                cost NUMERIC,
+                attack NUMERIC,
+                health NUMERIC,
+                'set' TEXT,
+                artist TEXT,
+                flavor TEXT,
+                mechanics TEXT,
+                race TEXT,
+                durability NUMERIC
+            )""")
+        print len(hs_cards)
+        for card in hs_cards:
+            c.execute("""
+                    INSERT INTO hearthstonecards VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    )""", (card['id'], card['name']['enUS'], card.get('text', {}).get('enUS', ''), card.get('rarity', '').title(), card.get('type', '').title(), card.get('cost', 0), card.get('attack', 0), card.get('health', 0), card.get('set', ''), card.get('artist', ''), card.get('flavor', {}).get('enUS', ''), ', '.join(card.get('mechanics', [])), card.get('race', '').title(), card.get('durability', 0)))
+        c.execute('CREATE INDEX hscardname ON hearthstonecards (name)')
+        conn.commit()
