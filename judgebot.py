@@ -407,8 +407,15 @@ def dispatch_message(incomingMessage, fromChannel):
         elif message_words[0] == "helpsearch":
             ret.append((helpsearch(), True))
         elif message_words[0] == "hs" and len(message_words) > 1:
-            if message[3:] in allHSCardNames:
-                ret.append((printHSCard(c, message[3:]), False))
+            logging.debug("HS Request: {}".format(incomingMessage))
+            if incomingMessage[0] == "!":
+                card_name = incomingMessage[4:]
+            else:
+                card_name = incomingMessage[3:]
+            logging.debug("Cut card name as {}".format(card_name))
+            if card_name.lower() in allHSCardNames:
+                logging.debug("HS Card Name: {}".format(card_name))
+                ret.append((printHSCard(c, card_name.lower()), False))
         elif message in ["d6", "d20", "coin"]:
             if message == "coin":
                 flip = random.randint(0, 1)

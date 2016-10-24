@@ -397,18 +397,20 @@ def cardSearch(cursor, t, limit=None, random=False):
 def printHSCard(cursor, cardname):
     """Given a hearthstone card name, return a string"""
     logging.debug(cardname)
-    card = cursor.execute("SELECT * FROM hearthstonecards WHERE name = ?", (cardname.title(),)).fetchone()
+    card = cursor.execute("SELECT * FROM hearthstonecards WHERE name LIKE ? ORDER BY type DESC", (cardname,)).fetchone()
     message_out = ""
     if card:
         message_out += "*" + card["name"] + "* | "
         message_out += "{" + str(card["cost"]) + "}" + " | "
-        message_out += card["type"] + (" (" + card["race"] + ")" if card["race"] else "") + " | "
+        message_out += card["type"].replace("_", " ") + (" (" + card["race"] + ")" if card["race"] else "") + " | "
         if card["type"] == "Weapon":
             message_out += str(card["attack"]) + "/" + str(card["durability"]) + " | "
         elif card["type"] == "Minion":
             message_out += str(card["attack"]) + "/" + str(card["health"]) + " | "
         if card["text"]:
-            message_out += card["text"].replace("<b>", "").replace("</b>", "").replace("<i>", "_").replace("</i>", "_").replace('\n', ' ').replace("[x]", "").replace("$", "") + " | "
+            message_out += card["text"].replace("<b>", "").replace("</b>", "").replace("<i>", "_").replace("</i>", "_").replace('\n', ' ').replace("[x]", "").replace("$", "").replace("#", "").replace("Hero Power ", "")
+        if card["flavor"]:
+            message_out += " | " + card["flavor"]
         #if card["mechanics"]:
         #    message_out += card["mechanics"].title() + " | "
     else:
