@@ -51,7 +51,8 @@ try:
     logging.debug("Found %d cards" % numCards)
 
     c.execute('SELECT DISTINCT(name) FROM hearthstonecards')
-    allHSCardNames = [y[0].lower() for y in c.fetchall()]
+    allHSCardNamesWithCase = [y[0] for y in c.fetchall()]
+    allHSCardNames = [y[0].lower() for y in allHSCardNamesWithCase]
     numHSCards = len(allHSCardNames)
     logging.debug("Also found %d Hearthstone Cards" % numHSCards)
 except sqlite.OperationalError:  # pragma: no cover
@@ -407,14 +408,21 @@ def dispatch_message(incomingMessage, fromChannel):
         elif message_words[0] == "helpsearch":
             ret.append((helpsearch(), True))
         elif message_words[0] == "hs" and len(message_words) > 1:
-            logging.debug("HS Request: {}".format(incomingMessage))
-            if incomingMessage[0] == "!":
-                card_name = incomingMessage[4:]
+            card_name = None
+            remaining_words = " ".join(message_words[1:])
+            logging.debug("HS Request: {}".format(remaining_words))
+            if remaining_words.lower() in allHSCardNames:
+                logging.debug("Got HS lucky!")
+                card_name = remaining_words
             else:
-                card_name = incomingMessage[3:]
-            logging.debug("Cut card name as {}".format(card_name))
-            if card_name.lower() in allHSCardNames:
-                logging.debug("HS Card Name: {}".format(card_name))
+                guessed_cards = process.extract(remaining_words, allHSCardNamesWithCase, scorer=fuzz.ratio)
+                best_guess = guessed_cards[0]
+                if best_guess[1] >= 90:
+                    card_name = best_guess[0]
+                else:
+                    #logging.debug(guessed_cards)
+                    ret.append(("Unable to find your card, best guesses:\n" + "\n".join([x[0] + " (" + str(x[1]) + "% match)" for x in guessed_cards]), False))
+            if card_name:
                 ret.append((printHSCard(c, card_name.lower()), False))
         elif message in ["d6", "d20", "coin"]:
             if message == "coin":
