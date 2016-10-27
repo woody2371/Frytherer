@@ -14,6 +14,7 @@ from slackbot.bot import respond_to
 from slackbot.bot import listen_to
 from six import iteritems
 import requests
+from xml.dom.minidom import parseString
 try:
     import re2 as re
 except ImportError:
@@ -23,6 +24,7 @@ from threading import RLock
 from cachetools import cached, LRUCache, hashkey
 from fuzzywuzzy import process, fuzz
 from HTMLParser import HTMLParser
+from bs4 import BeautifulSoup
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -140,7 +142,6 @@ math_total = math_mode + math_operator
 
 total_thing = Combine((colon_total | colon_or_bang_total | math_total) + operand)
 super_total = OneOrMore(Optional(OneOrMore(boolean_operators)) + Optional(OneOrMore(brackets)) + total_thing + Optional(OneOrMore(brackets)) + Optional(OneOrMore(boolean_operators)))
-
 
 def guessCardName(message, card_tokens):
     # TODO: Be better with the [f(x) for x if f(x)] efficiency
@@ -407,6 +408,31 @@ def dispatch_message(incomingMessage, fromChannel):
             ret.append((help(), True))
         elif message_words[0] == "helpsearch":
             ret.append((helpsearch(), True))
+        elif message_words[0] == "wow" and len(message_words) > 1:
+            item_name = " ".join(message_words[1:])
+            try:
+                r = requests.get('http://www.wowhead.com/item='+item_name+'&xml')
+                if r.status_code == 200:
+                    dom = parseString(r.text)
+                    itemHtml = dom.getElementsByTagName('wowhead')[0].getElementsByTagName('item')[0].getElementsByTagName('htmlTooltip')[0].childNodes[0].nodeValue
+                    soup = BeautifulSoup(itemHtml, "html.parser")
+                    item_text = ""
+                    for idx, s in enumerate(soup.stripped_strings):
+                        if idx == 0:
+                            item_text += "*" + s + "*" + " | "
+                        elif s.endswith("Level") or s.endswith(" by") or s == "Speed" or s.endswith("dealing") or s == "+" or s.startswith("("):
+                            item_text += s + " "
+                        elif not s.endswith(":"):
+                            item_text += s + " | "
+                        else:
+                            item_text += s + " "
+                    ret.append((item_text, False))
+                else:
+                    ret.append(("Something went wrong retrieving the item - maybe wrong name? HTTP Status Code {}".format(r.status_code), False))
+            except:
+                ret.append(("Something went wrong getting or parsing the item", False))
+                logging.error(sys.exc_info())
+
         elif message_words[0] == "hs" and len(message_words) > 1:
             card_name = None
             remaining_words = " ".join(message_words[1:])
