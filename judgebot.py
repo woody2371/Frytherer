@@ -24,7 +24,8 @@ from threading import RLock
 from cachetools import cached, LRUCache, hashkey
 from fuzzywuzzy import process, fuzz
 from HTMLParser import HTMLParser
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
+
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -416,16 +417,63 @@ def dispatch_message(incomingMessage, fromChannel):
                     dom = parseString(r.text)
                     itemHtml = dom.getElementsByTagName('wowhead')[0].getElementsByTagName('item')[0].getElementsByTagName('htmlTooltip')[0].childNodes[0].nodeValue
                     soup = BeautifulSoup(itemHtml, "html.parser")
+
                     item_text = ""
-                    for idx, s in enumerate(soup.stripped_strings):
-                        if idx == 0:
-                            item_text += "*" + s + "*" + " | "
-                        elif s.endswith("Level") or s.endswith(" by") or s == "Speed" or s.endswith("dealing") or s == "+" or s.startswith("("):
-                            item_text += s + " "
-                        elif not s.endswith(":"):
-                            item_text += s + " | "
-                        else:
-                            item_text += s + " "
+                    next_is_name = False
+                    next_is_bind = False
+                    printed_sell_price = False
+
+                    for outer_table in soup:
+                        for inner_item in outer_table:
+                            for x in inner_item.td:
+                                if next_is_name:
+                                    item_text += "*" + x.string + "*" + " | "
+                                    next_is_name = False
+                                elif next_is_bind:
+                                    item_text += x.string + " | "
+                                    next_is_bind = False
+                                elif x == "nstart":
+                                    next_is_name = True
+                                elif "ilvl" in x:
+                                    item_text += x.text + " | "
+                                elif x == "bo":
+                                    next_is_bind = True
+                                elif isinstance(x, Comment):
+                                    continue
+                                elif str(x) == "<br/>":
+                                    continue
+                                elif str(x).startswith("<table"):
+                                    if "<!--spd-->" in str(x):
+                                        do_separator = False
+                                    else:
+                                        do_separator = True
+                                    item_text += x.td.text + " | "
+                                    try:
+                                        if x.th.span.text:
+                                            item_text += x.th.span.text + " | "
+                                    except AttributeError:
+                                        if x.th.text:
+                                            item_text += x.th.text + (" | " if do_separator else " ")
+                                elif str(x).startswith("<span") or str(x).startswith("<a"):
+                                    item_text += x.text + " | "
+                                elif str(x) == "Requires Level ":
+                                    item_text += x
+                                elif "sellprice" in str(x):
+                                    if not printed_sell_price:
+                                        item_text += "Sell Price "
+                                        printed_sell_price = True
+                                    for span in x.find_all('span'):
+                                        item_text += span.string
+                                        if span['class'][0] == 'moneygold':
+                                            item_text += "G "
+                                        elif span['class'][0] == 'moneysilver':
+                                            item_text += "S "
+                                        elif span['class'][0] == 'moneycopper':
+                                            item_text += "C "
+                                        item_text + " | "
+                                else:
+                                    x = str(x).strip()
+                                    item_text += x + (" " if x.endswith(":") else " | ")
                     ret.append((item_text, False))
                 else:
                     ret.append(("Something went wrong retrieving the item - maybe wrong name? HTTP Status Code {}".format(r.status_code), False))
