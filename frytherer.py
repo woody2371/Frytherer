@@ -694,6 +694,7 @@ def help():
     ret += "d6|d20|coin - flips or rolls the appropriate randomisation instrument.\n"
     ret += "mo|jho|sto <X> - rolls you a Momir/Jhoira/Stonehewer Giant activation for CMC X\n"
     ret += "hs <card name> - Print out the requested Hearthstone Card\n"
+    ret += "wow <name> - Print out the requested World of Warcraft item/spell/quest/achievement\n"
     ret += "help - prints this help\n"
     ret += "Any bugs, questions, or suggestions - ask Fry!\n"
     return ret

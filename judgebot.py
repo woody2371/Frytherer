@@ -25,6 +25,7 @@ from cachetools import cached, LRUCache, hashkey
 from fuzzywuzzy import process, fuzz
 from HTMLParser import HTMLParser
 from bs4 import BeautifulSoup, Comment
+import json as basicjson
 
 
 import logging
@@ -412,69 +413,137 @@ def dispatch_message(incomingMessage, fromChannel):
         elif message_words[0] == "wow" and len(message_words) > 1:
             item_name = " ".join(message_words[1:])
             try:
-                r = requests.get('http://www.wowhead.com/item='+item_name+'&xml')
+                r = requests.get('http://www.wowhead.com/search?q='+item_name+'&opensearch')
+                x = basicjson.loads(r.text)
                 if r.status_code == 200:
-                    dom = parseString(r.text)
-                    itemHtml = dom.getElementsByTagName('wowhead')[0].getElementsByTagName('item')[0].getElementsByTagName('htmlTooltip')[0].childNodes[0].nodeValue
-                    soup = BeautifulSoup(itemHtml, "html.parser")
+                    if len(x[1]):
+                        preferred_item = ""
+                        preferred_spell = ""
+                        preferred_quest = ""
+                        preferred_achievement = ""
+                        req_url = None
 
-                    item_text = ""
-                    next_is_name = False
-                    next_is_bind = False
-                    printed_sell_price = False
+                        # See if exact match
+                        for (idx, result) in enumerate(x[1]):
+                            (result_name, result_type) = result.rsplit(" (", 1)
+                            if result_name.lower() == x[0].lower() or len(x[1]) == 1:
+                                if result_type[:-1] == "Item":
+                                    preferred_item = x[7][idx][1]
+                                elif result_type[:-1] == "Spell":
+                                    preferred_spell = x[7][idx][1]
+                                elif result_type[:-1] == "Quest":
+                                    preferred_quest = x[7][idx][1]
+                                elif result_type[:-1] == "Achievement":
+                                    preferred_achievement = x[7][idx][1]
 
-                    for outer_table in soup:
-                        for inner_item in outer_table:
-                            for x in inner_item.td:
-                                if next_is_name:
-                                    item_text += "*" + x.string + "*" + " | "
+                        # Order of preference:
+                        if preferred_item:
+                            req_url = 'http://www.wowhead.com/item={}&xml'.format(preferred_item)
+                        elif preferred_spell:
+                            req_url = 'http://www.wowhead.com/spell={}&power'.format(preferred_spell)
+                        elif preferred_quest:
+                            req_url = 'http://www.wowhead.com/quest={}&power'.format(preferred_quest)
+                        elif preferred_achievement:
+                            req_url = 'http://www.wowhead.com/achievement={}&power'.format(preferred_achievement)
+
+                        if req_url:
+                            r2 = requests.get(req_url)
+                            if r2.status_code == 200:
+                                if preferred_item:
+                                    dom = parseString(r2.text)
+                                    itemHtml = dom.getElementsByTagName('wowhead')[0].getElementsByTagName('item')[0].getElementsByTagName('htmlTooltip')[0].childNodes[0].nodeValue
+                                    soup = BeautifulSoup(itemHtml, "html.parser")
+
+                                    item_text = ""
                                     next_is_name = False
-                                elif next_is_bind:
-                                    item_text += x.string + " | "
                                     next_is_bind = False
-                                elif x == "nstart":
-                                    next_is_name = True
-                                elif "ilvl" in x:
-                                    item_text += x.text + " | "
-                                elif x == "bo":
-                                    next_is_bind = True
-                                elif isinstance(x, Comment):
-                                    continue
-                                elif str(x) == "<br/>":
-                                    continue
-                                elif str(x).startswith("<table"):
-                                    if "<!--spd-->" in str(x):
-                                        do_separator = False
-                                    else:
-                                        do_separator = True
-                                    item_text += x.td.text + " | "
-                                    try:
-                                        if x.th.span.text:
-                                            item_text += x.th.span.text + " | "
-                                    except AttributeError:
-                                        if x.th.text:
-                                            item_text += x.th.text + (" | " if do_separator else " ")
-                                elif str(x).startswith("<span") or str(x).startswith("<a"):
-                                    item_text += x.text + " | "
-                                elif str(x) == "Requires Level ":
-                                    item_text += x
-                                elif "sellprice" in str(x):
-                                    if not printed_sell_price:
-                                        item_text += "Sell Price "
-                                        printed_sell_price = True
-                                    for span in x.find_all('span'):
-                                        item_text += span.string
-                                        if span['class'][0] == 'moneygold':
-                                            item_text += "G "
-                                        elif span['class'][0] == 'moneysilver':
-                                            item_text += "S "
-                                        elif span['class'][0] == 'moneycopper':
-                                            item_text += "C "
-                                        item_text + " | "
+                                    printed_sell_price = False
+
+                                    for outer_table in soup:
+                                        for inner_item in outer_table:
+                                            for x in inner_item.td:
+                                                if next_is_name:
+                                                    item_text += "*" + x.string + "*" + " | "
+                                                    next_is_name = False
+                                                elif next_is_bind:
+                                                    item_text += x.string + " | "
+                                                    next_is_bind = False
+                                                elif x == "nstart":
+                                                    next_is_name = True
+                                                elif "ilvl" in x:
+                                                    item_text += x.text + " | "
+                                                elif x == "bo":
+                                                    next_is_bind = True
+                                                elif isinstance(x, Comment):
+                                                    continue
+                                                elif str(x) == "<br/>":
+                                                    continue
+                                                elif str(x).startswith("<table"):
+                                                    if "<!--spd-->" in str(x):
+                                                        do_separator = False
+                                                    else:
+                                                        do_separator = True
+                                                    item_text += x.td.text + " | "
+                                                    try:
+                                                        if x.th.span.text:
+                                                            item_text += x.th.span.text + " | "
+                                                    except AttributeError:
+                                                        if x.th.text:
+                                                            item_text += x.th.text + (" | " if do_separator else " ")
+                                                elif str(x).startswith("<span") or str(x).startswith("<a") or str(x).startswith("<div"):
+                                                    item_text += x.text + " | "
+                                                elif str(x) == "Requires Level ":
+                                                    item_text += x
+                                                elif "sellprice" in str(x):
+                                                    if not printed_sell_price:
+                                                        item_text += "Sell Price "
+                                                        printed_sell_price = True
+                                                    for span in x.find_all('span'):
+                                                        item_text += span.string
+                                                        if span['class'][0] == 'moneygold':
+                                                            item_text += "G "
+                                                        elif span['class'][0] == 'moneysilver':
+                                                            item_text += "S "
+                                                        elif span['class'][0] == 'moneycopper':
+                                                            item_text += "C "
+                                                        item_text + " | "
+                                                else:
+                                                    x = str(x).strip()
+                                                    item_text += x + (" " if x.endswith(":") else " | ")
                                 else:
-                                    x = str(x).strip()
-                                    item_text += x + (" " if x.endswith(":") else " | ")
-                    ret.append((item_text, False))
+                                    v = (r2.text).split("tooltip_enus: '")[1].split("',")[0]
+                                    soup = BeautifulSoup(v, 'html.parser')
+                                    item_text = ""
+                                    printed_name = False
+
+                                    for outer_table in soup:
+                                        for inner_item in outer_table:
+                                            for x in inner_item.td:
+                                                try:
+                                                    x = x.text.strip()
+                                                    if x:
+                                                        x = x.replace("\\\'", "'")
+                                                        if not printed_name:
+                                                            item_text += "*"
+                                                        item_text += x + ("*" if not printed_name else "") + (" " if x.endswith(":") else " | ")
+                                                        if not printed_name:
+                                                            printed_name = True
+                                                except:
+                                                    x = x.strip()
+                                                    if x:
+                                                        x = x.replace("\\\'", "'")
+                                                        if not printed_name:
+                                                            item_text += "*"
+                                                        item_text += x + (" " if x.endswith(":") else " | ")
+                                                        if not printed_name:
+                                                            printed_name = True
+                                ret.append((item_text, False))
+                            else:
+                                ret.append(("Found a match but something went wrong getting the tooltip :(", False))
+                        else:
+                            ret.append(("Unable to find exact match, here are some options: {}".format(", ".join(x[1])), False))
+                    else:
+                        ret.append(("No matches found :(", False))
                 else:
                     ret.append(("Something went wrong retrieving the item - maybe wrong name? HTTP Status Code {}".format(r.status_code), False))
             except:
