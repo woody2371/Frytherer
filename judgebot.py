@@ -8,7 +8,7 @@ Comprehensive Rules and other such useful garbage
 import random, sys, string
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
-from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard
+from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard, wow_get_dude
 from slackbot.bot import Bot
 from slackbot.bot import respond_to
 from slackbot.bot import listen_to
@@ -80,7 +80,6 @@ for rule in rules:
     x = re.split(r'(?:\. )|(?:: )', rule)
     all_rules[x[0]] = ". ".join(x[1:])
 del rules
-
 
 def messagekey(message, *args, **kwargs):   # pragma: no cover
     """Custom hashing function for LRU Cache."""
@@ -410,12 +409,28 @@ def dispatch_message(incomingMessage, fromChannel):
             ret.append((help(), True))
         elif message_words[0] == "helpsearch":
             ret.append((helpsearch(), True))
+        elif message_words[0] == "wowdude" and (len(message_words) == 3 or len(message_words) == 4):
+            new_words = message.title()
+            message_words = new_words.split()
+            items = False
+            talents = False
+            if message_words == 3:
+                realm = message_words[1]
+                name = message_words[2]
+            else:
+                if message_words[1] == "Items":
+                    items = True
+                elif message_words[1] == "Talents":
+                    talents = True
+                realm = message_words[2]
+                name = message_words[3]
+            ret.append((wow_get_dude(realm, name, items, talents), False))
         elif message_words[0] == "wow" and len(message_words) > 1:
             item_name = " ".join(message_words[1:])
             try:
                 r = requests.get('http://www.wowhead.com/search?q='+item_name+'&opensearch')
-                x = basicjson.loads(r.text)
                 if r.status_code == 200:
+                    x = basicjson.loads(r.text)
                     if len(x[1]):
                         preferred_item = ""
                         preferred_spell = ""

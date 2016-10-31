@@ -5,7 +5,7 @@
 This module contains all the helper functions for the
 Frytherer command line interface and the Slackbot
 """
-import ast, string, sys
+import ast, string, sys, requests, json
 from itertools import product
 from operator import and_, or_
 try:
@@ -19,6 +19,53 @@ logging.basicConfig(level=logging.DEBUG)
 mana_regexp = re.compile('([0-9]*)(b*)(g*)(r*)(u*)(w*)')
 section_regexp = re.compile('a{0,1}(ipg|mtr) (?:(appendix [a-z])|(\d+)(?:(?:\.)(\d{1,2})){0,1})')
 single_quoted_word = re.compile('^(?:\"|\')\w+(?:\"|\')$')
+
+from wow_data import *
+wow_uri = "https://us.api.battle.net/wow/"
+wow_token_string = "locale=en_US&apikey="
+
+def wow_get_item(item_id):
+    wow_api = 'item/{}/?'.format(item_id)
+    r = requests.get(wow_uri + wow_api + wow_token_string)
+    if r.status_code == 200:
+        x = json.loads(r.text)
+        item_text = []
+        item_text.append("*" + x["name"] + "*")
+        item_text.append("Item Level " + x["itemLevel"])
+        if x["itemBind"] == 1:
+            item_text.append("Binds when picked up")
+        if x["maxCount"] == 1:
+            item_text.append("Unique")
+        logging.info("Used {} / {} queries".format(r.headers.get('X-Plan-Quota-Current', "UNKNOWN"), r.headers.get('X-Plan-Quota-Allotted', "UNKNOWN")))
+    else:
+        logging.error("Bad status code from WOW API: {}".format(r.status_code))
+        return "Something went wrong retrieving the item"
+
+def wow_get_dude(realm, name, allitems=False, alltalents=False):
+    wow_api = 'character/{}/{}?fields=items,talents&'.format(realm, name)
+    r = requests.get(wow_uri + wow_api + wow_token_string)
+    if r.status_code == 200:
+        x = json.loads(r.text)
+        return_text = []
+        return_text.append("*" + x["realm"] + "-" + x["name"] + "*")
+        return_text.append("Level {}".format(x["level"]))
+        wow_class = [v["name"] for v in wow_classes["classes"] if v["id"] == x["class"]][0]
+        wow_spec = [v["spec"]["name"] for v in x["talents"] if v.has_key("selected")][0]
+        (race, side) = [(v["name"], v["side"]) for v in wow_races["races"] if v["id"] == x["race"]][0]
+        return_text.append(race + " " + wow_spec + " " + wow_class + ' (' + side.title() + ')')
+        return_text.append("Avg Equipped ilvl {}".format(x["items"]["averageItemLevelEquipped"]))
+        if allitems:
+            for (k, v) in x["items"].iteritems():
+                if k not in ["averageItemLevelEquipped", "averageItemLevel"]:
+                    item_name = "{} ({}) [{}]".format(v["name"], v["itemLevel"], v["context"].replace("-", " ").title())
+                    return_text.append("{}: {}".format(k.title(), item_name))
+        if alltalents:
+            for talent in sorted([y for y in x["talents"] if y.has_key("selected")][0]["talents"], key=lambda v: v["tier"]):
+                return_text.append("Tier {}: {}".format(talent["tier"], talent["spell"]["name"]))
+        logging.info("Used {} / {} queries".format(r.headers.get('X-Plan-Quota-Current', "UNKNOWN"), r.headers.get('X-Plan-Quota-Allotted', "UNKNOWN")))
+        return " | ".join(return_text)
+    else:
+        return "Character not found :("
 
 
 def gathererCapitalise(y):
@@ -695,6 +742,7 @@ def help():
     ret += "mo|jho|sto <X> - rolls you a Momir/Jhoira/Stonehewer Giant activation for CMC X\n"
     ret += "hs <card name> - Print out the requested Hearthstone Card\n"
     ret += "wow <name> - Print out the requested World of Warcraft item/spell/quest/achievement\n"
+    ret += "wowdude (items|talents) <realm> <name> - Print out information about the requested character (plus lists items or talents if requested)\n"
     ret += "help - prints this help\n"
     ret += "Any bugs, questions, or suggestions - ask Fry!\n"
     return ret
