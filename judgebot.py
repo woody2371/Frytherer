@@ -8,7 +8,7 @@ Comprehensive Rules and other such useful garbage
 import random, sys, string
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
-from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard, wow_get_dude
+from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard, wow_get_dude, wow_get_chieve, split_wow_info, split_wow_chieve
 from slackbot.bot import Bot
 from slackbot.bot import respond_to
 from slackbot.bot import listen_to
@@ -409,22 +409,18 @@ def dispatch_message(incomingMessage, fromChannel):
             ret.append((help(), True))
         elif message_words[0] == "helpsearch":
             ret.append((helpsearch(), True))
-        elif message_words[0] == "wowdude" and (len(message_words) == 3 or len(message_words) == 4):
-            new_words = message.title()
-            message_words = new_words.split()
-            items = False
-            talents = False
-            if message_words == 3:
-                realm = message_words[1]
-                name = message_words[2]
+        elif message_words[0] == "wowchieve":
+            (name, realm, chieve) = split_wow_chieve(message_words[1:])
+            if name is None or realm is None or chieve is None:
+                ret.append(("Unable to parse Realm, Player or Chieve name", False))
             else:
-                if message_words[1] == "Items":
-                    items = True
-                elif message_words[1] == "Talents":
-                    talents = True
-                realm = message_words[2]
-                name = message_words[3]
-            ret.append((wow_get_dude(realm, name, items, talents), False))
+                ret.append((wow_get_chieve(realm, name, chieve), False))
+        elif message_words[0] == "wowdude":
+            (modifier, player, realm) = split_wow_info(message_words[1:])
+            if realm is None or player is None:
+                ret.append(("Unable to parse Realm or Player name", False))
+            else:
+                ret.append((wow_get_dude(realm, name, modifier), False))
         elif message_words[0] == "wow" and len(message_words) > 1:
             item_name = " ".join(message_words[1:])
             try:
@@ -839,7 +835,10 @@ def handle_public_message(message, message_text):  # pragma: no cover
                 logging.debug("Sweet, setting channel")
                 logging.debug(cache)
                 message.body['channel'] = user_pm_channel
-        message.reply(reply[0])
+        if "<http" in reply[0]:
+            message.reply_webapi(reply[0])
+        else:
+            message.reply(reply[0])
 
 
 @respond_to('(.*)')
@@ -855,7 +854,10 @@ def handle_private_message(message, message_text):  # pragma: no cover
         replies = [replies]
     for reply in replies:
         if reply[0]:
-            message.reply(reply[0])
+            if "<http" in reply[0]:
+                message.reply_webapi(reply[0])
+            else:
+                message.reply(reply[0])
 
 if __name__ == '__main__':   # pragma: no cover
     reload(sys)  # Reload does the trick!
