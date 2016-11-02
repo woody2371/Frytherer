@@ -14,8 +14,23 @@ except ImportError:
     import re
 from fuzzywuzzy import process, fuzz
 
-from wow_data import *
-from wow_auth import *
+try:
+    from wow_data import *
+    from wow_auth import *
+
+    chieves = {}
+
+    for x in wow_chieves["achievements"]:
+        if len(x.get("categories", [])):
+            for cat in x["categories"]:
+                for chieve in cat["achievements"]:
+                    chieves[chieve["id"]] = {"title": chieve["title"].lower(), "criteria": chieve["criteria"]}
+        if len(x.get("achievements", [])):
+            for chieve in x["achievements"]:
+                chieves[chieve["id"]] = {"title": chieve["title"].lower(), "criteria": chieve["criteria"]}
+
+except ImportError:
+    logging.warning("WOW data not available")
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -25,40 +40,17 @@ section_regexp = re.compile('a{0,1}(ipg|mtr) (?:(appendix [a-z])|(\d+)(?:(?:\.)(
 single_quoted_word = re.compile('^(?:\"|\')\w+(?:\"|\')$')
 
 
-def split_wow_info(words):
-    ''' Given [(Items|Talents|None), PlayerName, RealmName] return a tuple'''
-    realm_names = [x["name"].lower() for x in wow_realms["realms"]]
-    modifier = None
-    player = None
-    realm = None
-
-    if words[0] == 'items' or words[0] == 'talents':
-        modifier = words[0].title()
-        words = words[1:]
-
+def split_wow_words(words):
+    """Given [Name, Realm, Tail], return a tuple"""
     try:
-        player = words[0].title()
-        words = words[1:]
-    except IndexError:
-        player = None
+        realm_names = [x["name"].lower() for x in wow_realms["realms"]]
+    except:
+        logging.error("WOW data not found")
+        return (None, None, None)
 
-    try:
-        for i in xrange(len(words), 0, -1):
-            test_realm_name = " ".join(words[:i])
-            if test_realm_name in realm_names:
-                realm = test_realm_name.title()
-                break
-    except IndexError:
-        realm = None
-    return (modifier, player, realm)
-
-
-def split_wow_chieve(words):
-    ''' Given [Name, Realm, Achievement], return a tuple'''
-    realm_names = [x["name"].lower() for x in wow_realms["realms"]]
     realm = None
     name = None
-    chieve = None
+    tail = None
 
     try:
         name = words[0].title()
@@ -76,59 +68,55 @@ def split_wow_chieve(words):
         realm = None
 
     try:
-        chieve = " ".join(words[i:]).title()
+        tail = " ".join(words[i:]).title()
     except IndexError:
-        chieve = None
+        tail = None
     except UnboundLocalError:
-        chieve = None
+        tail = None
 
-    return (name, realm, chieve)
+    return (name, realm, tail)
 
 
 def wow_get_chieve(realm, name, chieve_name):
-    chieve_id = None
-    r = requests.get('http://www.wowhead.com/search?q='+chieve_name+'&opensearch')
-    if r.status_code == 200:
-        x = json.loads(r.text)
-        if len(x[1]):
-            for (idx, result) in enumerate(x[1]):
-                (result_name, result_type) = result.rsplit(" (", 1)
-                if result_type[:-1] == "Achievement":
-                    chieve_id = x[7][idx][1]
-        else:
-            return "No results found on WowHead"
-        if chieve_id is None:
-            return "No results found on WowHead"
-    else:
-        return "Unable to find Achivement Name or WoWHead is down :("
+    """Given Realm, Name, Chieve, report on whether the player has completed it, or their progress"""
+    logging.debug("Retrieving Chieve {} for {}-{}".format(chieve_name, realm, name))
+    try:
+        chieve_id = [k for (k, v) in chieves.iteritems() if v["title"] == chieve_name.lower()][0]
+        chieve = chieves[chieve_id]
+        logging.debug("Chieve ID: {}".format(chieve_id))
+    except IndexError:
+        return ":open_mouth: Chieve not found"
 
     wow_api = 'character/{}/{}?fields=achievements&'.format(realm, name)
     r = requests.get(wow_uri + wow_api + wow_token_string)
     if r.status_code == 200:
+        logging.info("Used {} / {} queries".format(r.headers.get('X-Plan-Quota-Current', "UNKNOWN"), r.headers.get('X-Plan-Quota-Allotted', "UNKNOWN")))
         x = json.loads(r.text)
         if chieve_id in x["achievements"]["achievementsCompleted"]:
             return ":fire: Achievement Unlocked! :fire:"
         else:
+            ret = "\n"
             # Maybe they're part way through
-            wow_api_2 = 'achievement/{}?'.format(chieve_id)
-            r2 = requests.get(wow_uri + wow_api_2 + wow_token_string)
-            if r2.status_code == 200:
-                x2 = json.loads(r2.text)
-                ret = ""
-                for criteria in x2["criteria"]:
-                    logging.debug(criteria)
-                    if criteria["max"] == 1:
-                        ret += "[{}] {}\n".format((":white_check_mark:" if criteria["id"] in x["achievements"]["criteria"] else ":x:"), criteria["description"])
-                    else:
-                        crit_index = x["achievements"]["criteria"].index(criteria["id"])
-                        crit_status = x["achievements"]["criteriaQuantity"][crit_index]
-                        ret += "[{}/{}] {}\n".format(crit_status, criteria["max"], criteria["description"])
-                return ret
-            else:
-                return ":confused: Achievement not unlocked but can't contact Blizzard to find progress :confused:"
+            for criteria in chieve["criteria"]:
+                logging.debug(criteria)
+                found_chieves = [(key, value) for (key, value) in chieves.iteritems() if value["title"] == criteria["description"].lower()]
+                logging.debug("FOUND: {}".format(found_chieves))
+                if len(found_chieves):
+                    criteria["description"] = "<http://www.wowhead.com/achievement={}|{}>".format(found_chieves[0][0], string.capwords(found_chieves[0][1]["title"]))
+                if criteria["description"] == '':
+                    criteria["description"] = "UNKNOWN"
+                if criteria["max"] == 1:
+                    ret += "[{}] {}\n".format((":white_check_mark:" if criteria["id"] in x["achievements"]["criteria"] else ":x:"), criteria["description"])
+                else:
+                    crit_index = x["achievements"]["criteria"].index(criteria["id"])
+                    crit_status = x["achievements"]["criteriaQuantity"][crit_index]
+                    ret += "[{}/{}] {}\n".format(crit_status, criteria["max"], criteria["description"])
+            return ret
     return ":open_mouth: Something went wrong"
 
+
 def wow_get_item(item_id):
+    """Not ready, do not use"""
     wow_api = 'item/{}/?'.format(item_id)
     r = requests.get(wow_uri + wow_api + wow_token_string)
     if r.status_code == 200:
@@ -147,9 +135,9 @@ def wow_get_item(item_id):
 
 
 def wow_get_dude(realm, name, modifier=None):
-    ''' Given a realm, character name and optional modifier,
-        query the Blizzard API for that character's information
-    '''
+    """Given a realm, character name and optional modifier,
+    query the Blizzard API for that character's information
+    """
     wow_api = 'character/{}/{}?fields=items,talents&'.format(realm, name)
     r = requests.get(wow_uri + wow_api + wow_token_string)
     if r.status_code == 200:
@@ -158,7 +146,7 @@ def wow_get_dude(realm, name, modifier=None):
         return_text.append("*" + x["realm"] + "-" + x["name"] + "*")
         return_text.append("Level {}".format(x["level"]))
         wow_class = [v["name"] for v in wow_classes["classes"] if v["id"] == x["class"]][0]
-        wow_spec = [v["spec"]["name"] for v in x["talents"] if v.has_key("selected")][0]
+        wow_spec = [v["spec"]["name"] for v in x["talents"] if "selected" in v][0]
         (race, side) = [(v["name"], v["side"]) for v in wow_races["races"] if v["id"] == x["race"]][0]
         return_text.append(race + " " + wow_spec + " " + wow_class + ' (' + side.title() + ')')
         return_text.append("Avg Equipped ilvl {}".format(x["items"]["averageItemLevelEquipped"]))
@@ -166,10 +154,10 @@ def wow_get_dude(realm, name, modifier=None):
             for (k, v) in x["items"].iteritems():
                 if k not in ["averageItemLevelEquipped", "averageItemLevel"]:
                     item_name = "<http://www.wowhead.com/item={}|{}> ({}) [{}]".format(v["id"], v["name"], v["itemLevel"], v["context"].replace("-", " ").title())
-                    return_text.append("{}: {}".format(k.title(), item_name))
+                    return_text.append("{}: {}".format(string.capwords(k), item_name))
         elif modifier == 'Talents':
-            for talent in sorted([y for y in x["talents"] if y.has_key("selected")][0]["talents"], key=lambda v: v["tier"]):
-                return_text.append("Tier {}: {}".format(talent["tier"], talent["spell"]["name"]))
+            for talent in sorted([y for y in x["talents"] if "selected" in y][0]["talents"], key=lambda v: v["tier"]):
+                return_text.append("Tier {}: <http://www.wowhead.com/spell={}|{}>".format(talent["tier"], talent["spell"]["id"], talent["spell"]["name"]))
         logging.info("Used {} / {} queries".format(r.headers.get('X-Plan-Quota-Current', "UNKNOWN"), r.headers.get('X-Plan-Quota-Allotted', "UNKNOWN")))
         return " | ".join(return_text)
     else:
@@ -275,7 +263,7 @@ def calculateCMC(manaCost):
     return cmc
 
 
-class safelist(list):
+class SafeList(list):
     def get(self, index, default=None):
         try:
             return self.__getitem__(index)
@@ -290,7 +278,7 @@ def cardSearch(cursor, t, limit=None, random=False):
     INPUT: Terms to search for, and the database cursor
     OUTPT: Card objects (if found)
     """
-    terms = safelist(t)
+    terms = SafeList(t)
     params = []
     sql_query = "SELECT * FROM CARDS WHERE "
     do_later = []
@@ -566,8 +554,6 @@ def printHSCard(cursor, cardname):
             message_out += card["text"].replace("<b>", "").replace("</b>", "").replace("<i>", "_").replace("</i>", "_").replace('\n', ' ').replace("[x]", "").replace("$", "").replace("#", "").replace("Hero Power ", "")
         if card["flavor"]:
             message_out += " | " + card["flavor"]
-        #if card["mechanics"]:
-        #    message_out += card["mechanics"].title() + " | "
     else:
         message_out = "Card not found!?"
     return message_out
@@ -696,7 +682,7 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
 
 
 def cardExtendSearch(matches, command, ret, finalCard):
-    """ Take a card and command input, and output either the flavor or gatherer rulings of that card
+    """Take a card and command input, and output either the flavor or gatherer rulings of that card
 
     matches is a list of the matches for our gatherRuling regex, pulling out name and num
     command is either flavor or ruling, to tell us which to return
@@ -850,7 +836,7 @@ def help():
     ret += "mo|jho|sto <X> - rolls you a Momir/Jhoira/Stonehewer Giant activation for CMC X\n"
     ret += "hs <card name> - Print out the requested Hearthstone Card\n"
     ret += "wow <name> - Print out the requested World of Warcraft item/spell/quest/achievement\n"
-    ret += "wowdude (items|talents) <name> <realm> - Print out information about the requested character (plus lists items or talents if requested)\n"
+    ret += "wowdude <name> <realm> (items|talents) - Print out information about the requested character (plus lists items or talents if requested)\n"
     ret += "wowchieve <name> <realm> <achievement> - Print out information about the requested player's completion or progress of the given achievement\n"
     ret += "help - prints this help\n"
     ret += "Any bugs, questions, or suggestions - ask Fry!\n"

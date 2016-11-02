@@ -8,7 +8,7 @@ Comprehensive Rules and other such useful garbage
 import random, sys, string
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
-from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard, wow_get_dude, wow_get_chieve, split_wow_info, split_wow_chieve
+from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard, wow_get_dude, wow_get_chieve, split_wow_words
 from slackbot.bot import Bot
 from slackbot.bot import respond_to
 from slackbot.bot import listen_to
@@ -410,14 +410,14 @@ def dispatch_message(incomingMessage, fromChannel):
         elif message_words[0] == "helpsearch":
             ret.append((helpsearch(), True))
         elif message_words[0] == "wowchieve":
-            (name, realm, chieve) = split_wow_chieve(message_words[1:])
+            (name, realm, chieve) = split_wow_words(message_words[1:])
             if name is None or realm is None or chieve is None:
                 ret.append(("Unable to parse Realm, Player or Chieve name", False))
             else:
                 ret.append((wow_get_chieve(realm, name, chieve), False))
         elif message_words[0] == "wowdude":
-            (modifier, player, realm) = split_wow_info(message_words[1:])
-            if realm is None or player is None:
+            (name, realm, modifier) = split_wow_words(message_words[1:])
+            if realm is None or name is None:
                 ret.append(("Unable to parse Realm or Player name", False))
             else:
                 ret.append((wow_get_dude(realm, name, modifier), False))
