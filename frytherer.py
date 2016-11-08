@@ -13,37 +13,29 @@ try:
 except ImportError:
     import re
 from fuzzywuzzy import process, fuzz
-
-try:
-    from wow_data import *
-    from wow_auth import *
-
-    chieves = {}
-
-    for x in wow_chieves["achievements"]:
-        if len(x.get("categories", [])):
-            for cat in x["categories"]:
-                for chieve in cat["achievements"]:
-                    chieves[chieve["id"]] = {"title": chieve["title"].lower(), "criteria": chieve["criteria"]}
-        if len(x.get("achievements", [])):
-            for chieve in x["achievements"]:
-                chieves[chieve["id"]] = {"title": chieve["title"].lower(), "criteria": chieve["criteria"]}
-
-except ImportError:
-    logging.warning("WOW data not available")
+from cachetools import TTLCache
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
+
+try:
+    from wow_auth import wow_uri, wow_token_string
+    from wow_data import wow_races, wow_classes
+except ImportError:
+    logging.warning("WOW data not available")
 
 mana_regexp = re.compile('([0-9]*)(b*)(g*)(r*)(u*)(w*)')
 section_regexp = re.compile('a{0,1}(ipg|mtr) (?:(appendix [a-z])|(\d+)(?:(?:\.)(\d{1,2})){0,1})')
 single_quoted_word = re.compile('^(?:\"|\')\w+(?:\"|\')$')
 
 
-def split_wow_words(words):
+def split_wow_words(cursor, words):
     """Given [Name, Realm, Tail], return a tuple"""
+    logging.debug("Splitting WOW data: {}".format(words))
     try:
-        realm_names = [x["name"].lower() for x in wow_realms["realms"]]
+        # realm_names = [x["name"].lower() for x in wow_realms["realms"]]
+        realm_names = cursor.execute("SELECT lower(name) FROM wowrealms").fetchall()
+        realm_names = [x[0] for x in realm_names]
     except:
         logging.error("WOW data not found")
         return (None, None, None)
@@ -74,44 +66,112 @@ def split_wow_words(words):
     except UnboundLocalError:
         tail = None
 
+    logging.debug("Returned split N: {} R: {} T: {}".format(name, realm, tail))
     return (name, realm, tail)
 
 
-def wow_get_chieve(realm, name, chieve_name):
-    """Given Realm, Name, Chieve, report on whether the player has completed it, or their progress"""
-    logging.debug("Retrieving Chieve {} for {}-{}".format(chieve_name, realm, name))
-    try:
-        chieve_id = [k for (k, v) in chieves.iteritems() if v["title"] == chieve_name.lower()][0]
-        chieve = chieves[chieve_id]
-        logging.debug("Chieve ID: {}".format(chieve_id))
-    except IndexError:
-        return ":open_mouth: Chieve not found"
-
+def retrieve_wow_chieves(i):
+    """Given a string "name-realm", retrieve all chieves for that player,
+    for caching purposes"""
+    logging.info("Cache Chieve Get")
+    (name, realm) = i.split("-", 1)
     wow_api = 'character/{}/{}?fields=achievements&'.format(realm, name)
     r = requests.get(wow_uri + wow_api + wow_token_string)
     if r.status_code == 200:
         logging.info("Used {} / {} queries".format(r.headers.get('X-Plan-Quota-Current', "UNKNOWN"), r.headers.get('X-Plan-Quota-Allotted', "UNKNOWN")))
-        x = json.loads(r.text)
-        if chieve_id in x["achievements"]["achievementsCompleted"]:
+        return r.text
+    else:
+        logging.error("Bad status code from WOW API: {}".format(r.status_code))
+
+
+def retrieve_wow_dude(i):
+    """Given a string "name-realm", retrieve all talents, items, mounts and stats
+    for that player, for caching purposes"""
+    logging.info("Dude Cache Get")
+    (name, realm) = i.split("-", 1)
+    wow_api = 'character/{}/{}?fields=talents,items,mounts,stats,statistics&'.format(realm, name)
+    r = requests.get(wow_uri + wow_api + wow_token_string)
+    if r.status_code == 200:
+        logging.info("Used {} / {} queries".format(r.headers.get('X-Plan-Quota-Current', "UNKNOWN"), r.headers.get('X-Plan-Quota-Allotted', "UNKNOWN")))
+        return r.text
+    elif r.status_code == 404:
+        r.raise_for_status()
+    else:
+        logging.error("Bad status code from WOW API: {}".format(r.status_code))
+
+wow_dude_cache = TTLCache(maxsize=100, ttl=43200, missing=retrieve_wow_dude)
+wow_chieve_cache = TTLCache(maxsize=100, ttl=43200, missing=retrieve_wow_chieves)
+
+
+def wow_check_chieve(cursor, chieve_name):
+    """Given a chieve name, retrieve the details of it"""
+    chieve = cursor.execute("SELECT id, title, criteria FROM wowchieves WHERE title LIKE ? LIMIT 1", ('%' + chieve_name + '%',)).fetchone()
+    return bool(chieve)
+
+
+def wow_get_chieve(cursor, realm, name, chieve_name):
+    """Given (Realm, Name), Chieve, report on whether the player has completed it, or their progress or just the chieve"""
+    logging.debug("Retrieving Chieve {} for {}-{}".format(chieve_name, realm, name))
+
+    if chieve_name is None or chieve_name == "":
+        return ":open_mouth: Chieve not found"
+
+    chieve = cursor.execute("SELECT id, title, description, criteria FROM wowchieves WHERE title LIKE ? LIMIT 1", ('%' + chieve_name + '%',)).fetchone()
+    if not chieve:
+        return ":open_mouth: Chieve not found"
+    logging.debug("Chieve ID: {}".format(chieve["id"]))
+
+    if not realm or not name:
+        ret = []
+        criteria = ast.literal_eval(chieve["criteria"])
+        criteria = dedupe(criteria, lambda x: x["description"])
+
+        if len(criteria) < 2:
+            return "<http://www.wowhead.com/achievement={}|{}> - {}\n".format(chieve["id"], chieve["title"], chieve["description"])
+        else:
+            ret.append("{} - {}\n".format(chieve["title"], chieve["description"]))
+
+        for criterion in criteria:
+            found_chieve = cursor.execute("SELECT id, title FROM wowchieves WHERE title = ?", (criterion["description"],)).fetchone()
+            if found_chieve:
+                criterion["description"] = "<http://www.wowhead.com/achievement={}|{}>".format(found_chieve["id"], string.capwords(found_chieve["title"]))
+            if criterion["description"] == '':
+                criterion["description"] = "UNKNOWN"
+            ret.append("{}".format(criterion["description"]))
+        return ret[0] + ", ".join(ret[1:])
+
+    try:
+        char_chieve = wow_chieve_cache[name + "-" + realm]
+        x = json.loads(char_chieve)
+        if chieve["id"] in x["achievements"]["achievementsCompleted"]:
             return ":fire: Achievement Unlocked! :fire:"
         else:
-            ret = "\n"
+            ret = "{} - {}\n".format(chieve["title"], chieve["description"])
+            criteria = ast.literal_eval(chieve["criteria"])
+            criteria = dedupe(criteria, lambda x: x["description"])
             # Maybe they're part way through
-            for criteria in chieve["criteria"]:
-                logging.debug(criteria)
-                found_chieves = [(key, value) for (key, value) in chieves.iteritems() if value["title"] == criteria["description"].lower()]
-                logging.debug("FOUND: {}".format(found_chieves))
-                if len(found_chieves):
-                    criteria["description"] = "<http://www.wowhead.com/achievement={}|{}>".format(found_chieves[0][0], string.capwords(found_chieves[0][1]["title"]))
-                if criteria["description"] == '':
-                    criteria["description"] = "UNKNOWN"
-                if criteria["max"] == 1:
-                    ret += "[{}] {}\n".format((":white_check_mark:" if criteria["id"] in x["achievements"]["criteria"] else ":x:"), criteria["description"])
+            for criterion in criteria:
+                logging.debug(criterion)
+                # found_chieves = [(key, value) for (key, value) in chieves.iteritems() if value["title"] == criteria["description"].lower()]
+                found_chieve = cursor.execute("SELECT id, title FROM wowchieves WHERE title = ?", (criterion["description"],)).fetchone()
+                logging.debug("FOUND: {}".format(str(found_chieve)))
+                if found_chieve:
+                    criterion["description"] = "<http://www.wowhead.com/achievement={}|{}>".format(found_chieve["id"], string.capwords(found_chieve["title"]))
+                if criterion["description"] == '':
+                    criterion["description"] = "UNKNOWN"
+                if criterion["max"] == 1:
+                    ret += "[{}] {}\n".format((":white_check_mark:" if criterion["id"] in x["achievements"]["criteria"] else ":x:"), criterion["description"])
                 else:
-                    crit_index = x["achievements"]["criteria"].index(criteria["id"])
-                    crit_status = x["achievements"]["criteriaQuantity"][crit_index]
-                    ret += "[{}/{}] {}\n".format(crit_status, criteria["max"], criteria["description"])
+                    try:
+                        crit_index = x["achievements"]["criteria"].index(criterion["id"])
+                        crit_status = x["achievements"]["criteriaQuantity"][crit_index]
+                        ret += "[{}/{}] {}\n".format(crit_status, criterion["max"], criterion["description"])
+                    except ValueError:
+                        ret += "[:x:] {}\n".format(criterion["description"])
             return ret
+    except:
+        logging.error("Error retrieving chieves from cache")
+        logging.error(sys.exc_info())
     return ":open_mouth: Something went wrong"
 
 
@@ -134,34 +194,155 @@ def wow_get_item(item_id):
         return "Something went wrong retrieving the item"
 
 
-def wow_get_dude(realm, name, modifier=None):
+def wow_get_stat(player, stat_name):
+    """Given a player and a stat name, return the quantity of that stat"""
+    for subcat in player["statistics"]["subCategories"]:
+        for stat in subcat["statistics"]:
+            if stat["name"].lower() == stat_name.lower():
+                return (stat["quantity"], stat["highest"] if "highest" in stat else "")
+        if "subCategories" in subcat:
+            for subcat2 in subcat["subCategories"]:
+                for stat in subcat2["statistics"]:
+                    if stat["name"].lower() == stat_name.lower():
+                        return (stat["quantity"], stat["highest"] if "highest" in stat else "")
+    return None
+
+
+def wow_compare_dude_stat(cursor, realm1, name1, realm2, name2, stat=None):
+    """Compare the given stat (or a random one) of two given players"""
+    try:
+        ret = ""
+
+        dude1 = wow_dude_cache[name1 + "-" + realm1]
+        x1 = json.loads(dude1)
+        x2 = None
+        if realm2 and name2:
+            dude2 = wow_dude_cache[name2 + "-" + realm2]
+            x2 = json.loads(dude2)
+
+        if stat:
+            # If they gave us a stat name
+            stat_row = cursor.execute("SELECT name FROM wowstats WHERE name LIKE ? LIMIT 1", ('%' + stat + '%',)).fetchone()
+            stat_name = stat_row[0]
+            (value1, highest1) = wow_get_stat(x1, stat_name)
+            if x2:
+                (value2, highest2) = wow_get_stat(x2, stat_name)
+                ret += "\nComparing Stat: {}\n".format(stat_name)
+            else:
+                return "\nRetrieving Stat: {0} -- {1:,}{2}\n".format(stat_name, value1, " (" + highest1 + ")" if highest1 else "")
+        else:
+            # Random stat!
+            value1 = 0
+            if x2:
+                value2 = 0
+                while ((value1 == 0) and (value2 == 0) or (value1 is None) or (value2 is None)):
+                    stat_name = cursor.execute("SELECT name FROM wowstats ORDER BY RANDOM() LIMIT 1").fetchone()
+                    logging.info("Rolling the dice on..{}".format(stat_name[0]))
+                    (value1, highest1) = wow_get_stat(x1, stat_name[0])
+                    (value2, highest2) = wow_get_stat(x2, stat_name[0])
+                ret += "\n:game_die: Random Stat: {} :game_die:\n".format(stat_name[0])
+            else:
+                while (value1 == 0) or (value1 is None):
+                    stat_name = cursor.execute("SELECT name FROM wowstats ORDER BY RANDOM() LIMIT 1").fetchone()
+                    logging.info("Rolling the dice on..{}".format(stat_name[0]))
+                    (value1, highest1) = wow_get_stat(x1, stat_name[0])
+                return "\n:game_die: Random Stat: {0} -- {1:,}{2} :game_die:\n".format(stat_name[0], value1, " (" + highest1 + ")" if highest1 else "")
+        if value1 > value2:
+            ret += "[:white_check_mark:] {0} ({1:,}){2} vs {3} ({4:,}){5} [:x:]\n".format(name1, value1, " (" + highest1 + ")" if highest1 else "", name2, value2, " (" + highest2 + ")" if highest2 else "")
+        elif value1 < value2:
+            ret += "[:x:] {0} ({1:,}){2} vs {3} ({4:,}){5} [:white_check_mark:]\n".format(name1, value1, " (" + highest1 + ")" if highest1 else "", name2, value2, " (" + highest2 + ")" if highest2 else "")
+        else:
+            ret += "[:interrobang:] TIE!! (Both on {0:,}{1})".format(value1, " (" + highest1 + ")" if highest1 else "")
+
+        return ret
+
+    except requests.exceptions.HTTPError:
+        return "Character not found :("
+    except:
+        logging.error("Error retrieving dude from cache")
+        logging.error(sys.exc_info())
+    return ":open_mouth: Something went wrong"
+
+
+def wow_get_dude(cursor, realm, name, modifier=None):
     """Given a realm, character name and optional modifier,
     query the Blizzard API for that character's information
     """
-    wow_api = 'character/{}/{}?fields=items,talents&'.format(realm, name)
-    r = requests.get(wow_uri + wow_api + wow_token_string)
-    if r.status_code == 200:
-        x = json.loads(r.text)
+    try:
+        dude = wow_dude_cache[name + "-" + realm]
+        x = json.loads(dude)
         return_text = []
-        return_text.append("*" + x["realm"] + "-" + x["name"] + "*")
+        return_text.append("*" + x["name"] + "-" + x["realm"] + "*")
         return_text.append("Level {}".format(x["level"]))
         wow_class = [v["name"] for v in wow_classes["classes"] if v["id"] == x["class"]][0]
         wow_spec = [v["spec"]["name"] for v in x["talents"] if "selected" in v][0]
         (race, side) = [(v["name"], v["side"]) for v in wow_races["races"] if v["id"] == x["race"]][0]
         return_text.append(race + " " + wow_spec + " " + wow_class + ' (' + side.title() + ')')
         return_text.append("Avg Equipped ilvl {}".format(x["items"]["averageItemLevelEquipped"]))
-        if modifier == 'Items':
+        if modifier.startswith("Number "):
+            logging.debug("Number query: {}".format(modifier))
+            stat_row = cursor.execute("SELECT name FROM wowstats WHERE name LIKE ? LIMIT 1", (modifier[7:],)).fetchone()
+            if stat_row:
+                logging.debug("Basic number get")
+                name2 = None
+                realm2 = None
+                mod2 = stat_row[0]
+            else:
+                (name2, realm2, mod2) = split_wow_words(cursor, modifier[7:].lower().split())
+                logging.info("Number of {} {} {}".format(name2, realm2, mod2))
+            return wow_compare_dude_stat(cursor, realm, name, realm2, name2, mod2)
+        elif modifier == 'Items':
             for (k, v) in x["items"].iteritems():
                 if k not in ["averageItemLevelEquipped", "averageItemLevel"]:
-                    item_name = "<http://www.wowhead.com/item={}|{}> ({}) [{}]".format(v["id"], v["name"], v["itemLevel"], v["context"].replace("-", " ").title())
+                    emoji = ""
+                    if v["quality"] == 2:
+                        emoji = ":wow-u:"
+                    elif v["quality"] == 3:
+                        emoji = ":wow-r:"
+                    elif v["quality"] == 4:
+                        emoji = ":wow-e:"
+                    elif v["quality"] == 5:
+                        emoji = ":wow-l:"
+                    elif v["quality"] == 6:
+                        emoji = ":wow-a:"
+                    elif v["quality"] == 7:
+                        emoji = ":wow-s:"
+                    item_name = "{} <http://www.wowhead.com/item={}|{}> ({}) [{}]".format(emoji, v["id"], v["name"], v["itemLevel"], v["context"].replace("-", " ").title())
                     return_text.append("{}: {}".format(string.capwords(k), item_name))
         elif modifier == 'Talents':
             for talent in sorted([y for y in x["talents"] if "selected" in y][0]["talents"], key=lambda v: v["tier"]):
                 return_text.append("Tier {}: <http://www.wowhead.com/spell={}|{}>".format(talent["tier"], talent["spell"]["id"], talent["spell"]["name"]))
-        logging.info("Used {} / {} queries".format(r.headers.get('X-Plan-Quota-Current', "UNKNOWN"), r.headers.get('X-Plan-Quota-Allotted', "UNKNOWN")))
+        elif modifier == 'Mounts':
+            return_text.append("Mounts collected: {}".format(x["mounts"]["numCollected"]))
+            return_text.append(", ".join([mount["name"] for mount in x["mounts"]["collected"]]))
+        elif modifier == 'Stats':
+            return_text.append("Health: {}".format(x["stats"]["health"]))
+            return_text.append("{}: {}".format(x["stats"]["powerType"].title(), x["stats"]["power"]))
+            return_text.append("Strength: {}".format(x["stats"]["str"]))
+            return_text.append("Agility: {}".format(x["stats"]["agi"]))
+            return_text.append("Intellect: {}".format(x["stats"]["int"]))
+            return_text.append("Stamina: {}".format(x["stats"]["sta"]))
+            return_text.append("Movement Speed: {0:.3g} (+{1}%)".format(x["stats"]["speedRating"], x["stats"]["speedRatingBonus"]))
+            return_text.append("Crit: {0:.3g}% ({1})".format(x["stats"]["crit"], x["stats"]["critRating"]))
+            return_text.append("Haste: {0:.3g}%".format(x["stats"]["hasteRatingPercent"]))
+            return_text.append("Mastery: {0:.3g}% ({1})".format(x["stats"]["mastery"], x["stats"]["masteryRating"]))
+            return_text.append("Leech: {0:.3g}".format(x["stats"]["leech"]))
+            return_text.append("Versatility: {0} (+{1:.3g}% damage done) (+{2:.3g}% healing done) (+{3:.3g}% damage taken)".format(x["stats"]["versatility"], x["stats"]["versatilityDamageDoneBonus"], x["stats"]["versatilityHealingDoneBonus"], x["stats"]["versatilityDamageTakenBonus"]))
+            return_text.append("Avoidance: {0:.3g} (+{1}%)".format(x["stats"]["avoidanceRating"], x["stats"]["avoidanceRatingBonus"]))
+            return_text.append("Spell Penetration: {}".format(x["stats"]["spellPen"]))
+            return_text.append("Spell Crit: {0:.3g}% ({1})".format(x["stats"]["spellCrit"], x["stats"]["spellCritRating"]))
+            return_text.append("Armour: {}".format(x["stats"]["armor"]))
+            return_text.append("Dodge/Parry/Block: {0:.3g}/{1:.3g}/{2:.3g}".format(x["stats"]["dodge"], x["stats"]["parry"], x["stats"]["block"]))
+            return_text.append("Main Hand Damage: {0:.0f}-{1:.0f} @ {2:.3g} = {3:.0f} DEEPS".format(x["stats"]["mainHandDmgMin"], x["stats"]["mainHandDmgMax"], x["stats"]["mainHandSpeed"], x["stats"]["mainHandDps"]))
+            return_text.append("Off Hand Damage: {0:.0f}-{1:.0f} @ {2:.3g} = {3:.0f} DEEPS".format(x["stats"]["offHandDmgMin"], x["stats"]["offHandDmgMax"], x["stats"]["offHandSpeed"], x["stats"]["offHandDps"]))
+            return_text.append("Ranged Damage: {0:.0f}-{1:.0f} @ {2:.3g} = {3:.0f} DEEPS".format(x["stats"]["rangedDmgMin"], x["stats"]["rangedDmgMax"], x["stats"]["rangedSpeed"], x["stats"]["rangedDps"]))
         return " | ".join(return_text)
-    else:
+    except requests.exceptions.HTTPError:
         return "Character not found :("
+    except:
+        logging.error("Error retrieving dude from cache")
+        logging.error(sys.exc_info())
+    return ":open_mouth: Something went wrong"
 
 
 def gathererCapitalise(y):
@@ -835,9 +1016,9 @@ def help():
     ret += "d6|d20|coin - flips or rolls the appropriate randomisation instrument.\n"
     ret += "mo|jho|sto <X> - rolls you a Momir/Jhoira/Stonehewer Giant activation for CMC X\n"
     ret += "hs <card name> - Print out the requested Hearthstone Card\n"
-    ret += "wow <name> - Print out the requested World of Warcraft item/spell/quest/achievement\n"
-    ret += "wowdude <name> <realm> (items|talents) - Print out information about the requested character (plus lists items or talents if requested)\n"
-    ret += "wowchieve <name> <realm> <achievement> - Print out information about the requested player's completion or progress of the given achievement\n"
+    ret += "wow <name> - Print out the requested World of Warcraft item/spell/quest\n"
+    ret += "wowdude <name> <realm> (items|talents|mounts|stats|number ((<player2> <realm2>,) (criterion or blank for random)) - Print out information about the requested character (plus lists the extra thing at the end if requested)\n"
+    ret += "wowchieve (<name> <realm>) <achievement> - Print out information about the achievement, or the requested player's progress of the given achievement\n"
     ret += "help - prints this help\n"
     ret += "Any bugs, questions, or suggestions - ask Fry!\n"
     return ret

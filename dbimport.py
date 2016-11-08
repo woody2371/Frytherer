@@ -2,7 +2,7 @@
 """Import cards from JSON into SQLite DB."""
 
 import pysqlite2.dbapi2 as sqlite
-import sys, json
+import sys, json, pickle
 
 if __name__ == '__main__':
     try:
@@ -114,33 +114,148 @@ if __name__ == '__main__':
         try:
             with open('cards.json') as data_file:
                 hs_cards = json.load(data_file)
+            c.execute("DROP TABLE IF EXISTS hearthstonecards")
+
+            c.execute("""
+                CREATE TABLE hearthstonecards (
+                    id TEXT PRIMARY KEY UNIQUE,
+                    name TEXT,
+                    text TEXT,
+                    rarity TEXT,
+                    type TEXT,
+                    cost NUMERIC,
+                    attack NUMERIC,
+                    health NUMERIC,
+                    'set' TEXT,
+                    artist TEXT,
+                    flavor TEXT,
+                    mechanics TEXT,
+                    race TEXT,
+                    durability NUMERIC
+                )""")
+            print len(hs_cards)
+            for card in hs_cards:
+                c.execute("""
+                        INSERT INTO hearthstonecards VALUES (
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                        )""", (card['id'], card['name']['enUS'], card.get('text', {}).get('enUS', ''), card.get('rarity', '').title(), card.get('type', '').title(), card.get('cost', 0), card.get('attack', 0), card.get('health', 0), card.get('set', ''), card.get('artist', ''), card.get('flavor', {}).get('enUS', ''), ', '.join(card.get('mechanics', [])), card.get('race', '').title(), card.get('durability', 0)))
+            c.execute('CREATE INDEX hscardname ON hearthstonecards (name)')
+            conn.commit()
         except IOError:
             print "Unable to import cards - goodbye"
             sys.exit(0)
-        c.execute("DROP TABLE IF EXISTS hearthstonecards")
 
-        c.execute("""
-            CREATE TABLE hearthstonecards (
-                id TEXT PRIMARY KEY UNIQUE,
-                name TEXT,
-                text TEXT,
-                rarity TEXT,
-                type TEXT,
-                cost NUMERIC,
-                attack NUMERIC,
-                health NUMERIC,
-                'set' TEXT,
-                artist TEXT,
-                flavor TEXT,
-                mechanics TEXT,
-                race TEXT,
-                durability NUMERIC
-            )""")
-        print len(hs_cards)
-        for card in hs_cards:
+    ##
+    # Load WOW stuff
+    ##
+
+    # Chieves
+    numCards = -1
+
+    # Check if the database actually has stuff
+    try:
+        c.execute('SELECT COUNT(DISTINCT(id)) FROM wowchieves')
+        numCards = c.fetchone()[0]
+    except sqlite.OperationalError:
+        print "No chieves in DB? Trying to import"
+        numCards = 0
+
+    if numCards < 1:
+        # Load in all the chieves
+        try:
+            from wow_db_data import *
+            c.execute("DROP TABLE IF EXISTS wowchieves")
             c.execute("""
-                    INSERT INTO hearthstonecards VALUES (
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-                    )""", (card['id'], card['name']['enUS'], card.get('text', {}).get('enUS', ''), card.get('rarity', '').title(), card.get('type', '').title(), card.get('cost', 0), card.get('attack', 0), card.get('health', 0), card.get('set', ''), card.get('artist', ''), card.get('flavor', {}).get('enUS', ''), ', '.join(card.get('mechanics', [])), card.get('race', '').title(), card.get('durability', 0)))
-        c.execute('CREATE INDEX hscardname ON hearthstonecards (name)')
-        conn.commit()
+                CREATE TABLE wowchieves (
+                    id TEXT PRIMARY KEY UNIQUE,
+                    title TEXT,
+                    description TEXT,
+                    criteria TEXT
+            )""")
+            for x in wow_chieves["achievements"]:
+                if len(x.get("categories", [])):
+                    for cat in x["categories"]:
+                        for chieve in cat["achievements"]:
+                            c.execute("""
+                                INSERT INTO wowchieves VALUES (
+                                    ?, ?, ?, ?
+                                )""", (chieve["id"], chieve["title"], chieve.get("description", ""), str(chieve["criteria"])))
+                if len(x.get("achievements", [])):
+                    for chieve in x["achievements"]:
+                            c.execute("""
+                                INSERT INTO wowchieves VALUES (
+                                    ?, ?, ?, ?
+                                )""", (chieve["id"], chieve["title"], chieve.get("description", ""), str(chieve["criteria"])))
+            c.execute('CREATE INDEX chievename ON wowchieves (id)')
+            conn.commit()
+        except:
+            print "Unable to import chieves"
+            print sys.exc_info()
+
+    # Realms
+    numCards = -1
+
+    # Check if the database actually has stuff
+    try:
+        c.execute('SELECT COUNT(DISTINCT(name)) FROM wowrealms')
+        numCards = c.fetchone()[0]
+    except sqlite.OperationalError:
+        print "No realms in DB? Trying to import"
+        numCards = 0
+
+    if numCards < 1:
+        # Load in all the realms
+        try:
+            from wow_db_data import *
+            c.execute("DROP TABLE IF EXISTS wowrealms")
+            c.execute("""
+                CREATE TABLE wowrealms (
+                    name TEXT PRIMARY KEY UNIQUE,
+                    type TEXT,
+                    locale TEXT,
+                    timezone TEXT,
+                    connected_realms TEXT
+
+            )""")
+            for x in wow_realms["realms"]:
+                c.execute("""
+                    INSERT INTO wowrealms VALUES (
+                        ?, ?, ?, ?, ?
+                )""", (x["name"], x["type"], x["locale"], x["timezone"], str(x["connected_realms"])))
+            c.execute('CREATE INDEX realmname ON wowrealms (name)')
+            conn.commit()
+        except:
+            print "Unable to import realms"
+            print sys.exc_info()
+
+    # Stats
+    numCards = -1
+
+    # Check if the database actually has stuff
+    try:
+        c.execute('SELECT COUNT(DISTINCT(name)) FROM wowstats')
+        numCards = c.fetchone()[0]
+    except sqlite.OperationalError:
+        print "No stats in DB? Trying to import"
+        numCards = 0
+
+    if numCards < 1:
+        # Load in all the stats
+        try:
+            c.execute("DROP TABLE IF EXISTS wowstats")
+            c.execute("""
+                CREATE TABLE wowstats (
+                    name TEXT PRIMARY KEY UNIQUE
+            )""")
+            with open('wow_stats.obj', 'r') as f:
+                stats = pickle.load(f)
+            for stat in stats:
+                c.execute("""
+                    INSERT INTO wowstats VALUES (
+                        ?
+                )""", (stat,))
+            c.execute('CREATE INDEX statname ON wowstats (name)')
+            conn.commit()
+        except:
+            print "Unable to import stats"
+            print sys.exc_info()

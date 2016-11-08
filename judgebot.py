@@ -8,7 +8,7 @@ Comprehensive Rules and other such useful garbage
 import random, sys, string
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
-from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard, wow_get_dude, wow_get_chieve, split_wow_words
+from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard, wow_get_dude, wow_get_chieve, wow_check_chieve, split_wow_words
 from slackbot.bot import Bot
 from slackbot.bot import respond_to
 from slackbot.bot import listen_to
@@ -410,17 +410,22 @@ def dispatch_message(incomingMessage, fromChannel):
         elif message_words[0] == "helpsearch":
             ret.append((helpsearch(), True))
         elif message_words[0] == "wowchieve":
-            (name, realm, chieve) = split_wow_words(message_words[1:])
-            if name is None or realm is None or chieve is None:
-                ret.append(("Unable to parse Realm, Player or Chieve name", False))
+            if wow_check_chieve(c, " ".join(message_words[1:])):
+                ret.append((wow_get_chieve(c, None, None, " ".join(message_words[1:])), False))
             else:
-                ret.append((wow_get_chieve(realm, name, chieve), False))
+                (name, realm, chieve) = split_wow_words(c, message_words[1:])
+                logging.debug("N: {} R: {} C: {}".format(name, realm, chieve))
+                if name is None or realm is None or chieve is None:
+                    ret.append(("Unable to parse Realm, Player or Chieve name", False))
+                else:
+                    ret.append((wow_get_chieve(c, realm, name, chieve), False))
         elif message_words[0] == "wowdude":
-            (name, realm, modifier) = split_wow_words(message_words[1:])
+            (name, realm, modifier) = split_wow_words(c, message_words[1:])
+            logging.debug("N: {} R: {} M: {}".format(name, realm, modifier))
             if realm is None or name is None:
                 ret.append(("Unable to parse Realm or Player name", False))
             else:
-                ret.append((wow_get_dude(realm, name, modifier), False))
+                ret.append((wow_get_dude(c, realm, name, modifier), False))
         elif message_words[0] == "wow" and len(message_words) > 1:
             item_name = " ".join(message_words[1:])
             try:
@@ -472,55 +477,59 @@ def dispatch_message(incomingMessage, fromChannel):
 
                                     for outer_table in soup:
                                         for inner_item in outer_table:
-                                            for x in inner_item.td:
-                                                if next_is_name:
-                                                    item_text += "*" + x.string + "*" + " | "
-                                                    next_is_name = False
-                                                elif next_is_bind:
-                                                    item_text += x.string + " | "
-                                                    next_is_bind = False
-                                                elif x == "nstart":
-                                                    next_is_name = True
-                                                elif "ilvl" in x:
-                                                    item_text += x.text + " | "
-                                                elif x == "bo":
-                                                    next_is_bind = True
-                                                elif isinstance(x, Comment):
-                                                    continue
-                                                elif str(x) == "<br/>":
-                                                    continue
-                                                elif str(x).startswith("<table"):
-                                                    if "<!--spd-->" in str(x):
-                                                        do_separator = False
+                                            try:
+                                                for x in inner_item.td:
+                                                    if next_is_name:
+                                                        item_text += "*" + x.string + "*" + " | "
+                                                        next_is_name = False
+                                                    elif next_is_bind:
+                                                        item_text += x.string + " | "
+                                                        next_is_bind = False
+                                                    elif x == "nstart":
+                                                        next_is_name = True
+                                                    elif "ilvl" in x:
+                                                        item_text += x.text + " | "
+                                                    elif x == "bo":
+                                                        next_is_bind = True
+                                                    elif isinstance(x, Comment):
+                                                        continue
+                                                    elif str(x) == "<br/>":
+                                                        continue
+                                                    elif str(x).startswith("<table"):
+                                                        if "<!--spd-->" in str(x):
+                                                            do_separator = False
+                                                        else:
+                                                            do_separator = True
+                                                        item_text += x.td.text + " | "
+                                                        try:
+                                                            if x.th.span.text:
+                                                                item_text += x.th.span.text + " | "
+                                                        except AttributeError:
+                                                            if x.th.text:
+                                                                item_text += x.th.text + (" | " if do_separator else " ")
+                                                    elif str(x).startswith("<span") or str(x).startswith("<a") or str(x).startswith("<div"):
+                                                        item_text += x.text + " | "
+                                                    elif str(x) == "Requires Level ":
+                                                        item_text += x
+                                                    elif "sellprice" in str(x):
+                                                        if not printed_sell_price:
+                                                            item_text += "Sell Price "
+                                                            printed_sell_price = True
+                                                        for span in x.find_all('span'):
+                                                            item_text += span.string
+                                                            if span['class'][0] == 'moneygold':
+                                                                item_text += "G "
+                                                            elif span['class'][0] == 'moneysilver':
+                                                                item_text += "S "
+                                                            elif span['class'][0] == 'moneycopper':
+                                                                item_text += "C "
+                                                            item_text + " | "
                                                     else:
-                                                        do_separator = True
-                                                    item_text += x.td.text + " | "
-                                                    try:
-                                                        if x.th.span.text:
-                                                            item_text += x.th.span.text + " | "
-                                                    except AttributeError:
-                                                        if x.th.text:
-                                                            item_text += x.th.text + (" | " if do_separator else " ")
-                                                elif str(x).startswith("<span") or str(x).startswith("<a") or str(x).startswith("<div"):
-                                                    item_text += x.text + " | "
-                                                elif str(x) == "Requires Level ":
-                                                    item_text += x
-                                                elif "sellprice" in str(x):
-                                                    if not printed_sell_price:
-                                                        item_text += "Sell Price "
-                                                        printed_sell_price = True
-                                                    for span in x.find_all('span'):
-                                                        item_text += span.string
-                                                        if span['class'][0] == 'moneygold':
-                                                            item_text += "G "
-                                                        elif span['class'][0] == 'moneysilver':
-                                                            item_text += "S "
-                                                        elif span['class'][0] == 'moneycopper':
-                                                            item_text += "C "
-                                                        item_text + " | "
-                                                else:
-                                                    x = str(x).strip()
-                                                    item_text += x + (" " if x.endswith(":") else " | ")
+                                                        x = str(x).strip()
+                                                        item_text += x + (" " if x.endswith(":") else " | ")
+                                            except:
+                                                logging.error("Bailing on parsing")
+                                                item_text += inner_item
                                 else:
                                     v = (r2.text).split("tooltip_enus: '")[1].split("',")[0]
                                     soup = BeautifulSoup(v, 'html.parser')
