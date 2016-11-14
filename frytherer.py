@@ -89,7 +89,7 @@ def retrieve_wow_dude(i):
     for that player, for caching purposes"""
     logging.info("Dude Cache Get")
     (name, realm) = i.split("-", 1)
-    wow_api = 'character/{}/{}?fields=talents,items,mounts,stats,statistics&'.format(realm, name)
+    wow_api = 'character/{}/{}?fields=talents,items,mounts,stats,statistics,progression&'.format(realm, name)
     r = requests.get(wow_uri + wow_api + wow_token_string)
     if r.status_code == 200:
         logging.info("Used {} / {} queries".format(r.headers.get('X-Plan-Quota-Current', "UNKNOWN"), r.headers.get('X-Plan-Quota-Allotted', "UNKNOWN")))
@@ -336,6 +336,26 @@ def wow_get_dude(cursor, realm, name, modifier=None):
             return_text.append("Main Hand Damage: {0:.0f}-{1:.0f} @ {2:.3g} = {3:.0f} DEEPS".format(x["stats"]["mainHandDmgMin"], x["stats"]["mainHandDmgMax"], x["stats"]["mainHandSpeed"], x["stats"]["mainHandDps"]))
             return_text.append("Off Hand Damage: {0:.0f}-{1:.0f} @ {2:.3g} = {3:.0f} DEEPS".format(x["stats"]["offHandDmgMin"], x["stats"]["offHandDmgMax"], x["stats"]["offHandSpeed"], x["stats"]["offHandDps"]))
             return_text.append("Ranged Damage: {0:.0f}-{1:.0f} @ {2:.3g} = {3:.0f} DEEPS".format(x["stats"]["rangedDmgMin"], x["stats"]["rangedDmgMax"], x["stats"]["rangedSpeed"], x["stats"]["rangedDps"]))
+        elif modifier.startswith('Progression'):
+            if modifier == 'Progression':
+                raid = "The Emerald Nightmare"
+            else:
+                (mod, raid) = modifier.split(None, 1)
+
+            try:
+                r = [y for y in x["progression"]["raids"] if y["name"].lower() == raid.lower()][0]
+            except IndexError:
+                return "Raid '{}' not found :(".format(raid)
+            return_text.append(raid)
+            for progress in ["LFR", "Normal", "Heroic", "Mythic"]:
+                kills = 0
+                for boss in r["bosses"]:
+                    try:
+                        if boss[progress.lower() + "Kills"] > 0:
+                            kills += 1
+                    except KeyError:
+                        kills = "???"
+                return_text.append("{}: {}/{}".format(progress, kills, len(r["bosses"])))
         return " | ".join(return_text)
     except requests.exceptions.HTTPError:
         return "Character not found :("
@@ -1017,7 +1037,7 @@ def help():
     ret += "mo|jho|sto <X> - rolls you a Momir/Jhoira/Stonehewer Giant activation for CMC X\n"
     ret += "hs <card name> - Print out the requested Hearthstone Card\n"
     ret += "wow <name> - Print out the requested World of Warcraft item/spell/quest\n"
-    ret += "wowdude <name> <realm> (items|talents|mounts|stats|number ((<player2> <realm2>,) (criterion or blank for random)) - Print out information about the requested character (plus lists the extra thing at the end if requested)\n"
+    ret += "wowdude <name> <realm> (items|talents|mounts|stats|progression (<raid> or blank for EN)|number ((<player2> <realm2>,) (criterion or blank for random)) - Print out information about the requested character (plus lists the extra thing at the end if requested)\n"
     ret += "wowchieve (<name> <realm>) <achievement> - Print out information about the achievement, or the requested player's progress of the given achievement\n"
     ret += "help - prints this help\n"
     ret += "Any bugs, questions, or suggestions - ask Fry!\n"

@@ -3,6 +3,10 @@
 
 import pysqlite2.dbapi2 as sqlite
 import sys, json, pickle
+try:
+    from wow_db_data import *
+except ImportError:
+    print "No WOW data available"
 
 if __name__ == '__main__':
     try:
@@ -163,12 +167,13 @@ if __name__ == '__main__':
     if numCards < 1:
         # Load in all the chieves
         try:
-            from wow_db_data import *
+
             c.execute("DROP TABLE IF EXISTS wowchieves")
             c.execute("""
                 CREATE TABLE wowchieves (
                     id TEXT PRIMARY KEY UNIQUE,
                     title TEXT,
+                    faction NUMERIC,
                     description TEXT,
                     criteria TEXT
             )""")
@@ -178,14 +183,14 @@ if __name__ == '__main__':
                         for chieve in cat["achievements"]:
                             c.execute("""
                                 INSERT INTO wowchieves VALUES (
-                                    ?, ?, ?, ?
-                                )""", (chieve["id"], chieve["title"], chieve.get("description", ""), str(chieve["criteria"])))
+                                    ?, ?, ?, ?, ?
+                                )""", (chieve["id"], chieve["title"], chieve["factionId"], chieve.get("description", ""), str(chieve["criteria"])))
                 if len(x.get("achievements", [])):
                     for chieve in x["achievements"]:
                             c.execute("""
                                 INSERT INTO wowchieves VALUES (
-                                    ?, ?, ?, ?
-                                )""", (chieve["id"], chieve["title"], chieve.get("description", ""), str(chieve["criteria"])))
+                                    ?, ?, ?, ?, ?
+                                )""", (chieve["id"], chieve["title"], chieve["factionId"], chieve.get("description", ""), str(chieve["criteria"])))
             c.execute('CREATE INDEX chievename ON wowchieves (id)')
             conn.commit()
         except:
