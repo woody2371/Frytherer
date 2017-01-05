@@ -409,6 +409,8 @@ def dispatch_message(incomingMessage, fromChannel):
             ret.append((help(), True))
         elif message_words[0] == "helpsearch":
             ret.append((helpsearch(), True))
+        elif message_words[0] == "events":
+            events = pickle.load(file)
         elif message_words[0] == "wowchieve":
             if wow_check_chieve(c, " ".join(message_words[1:])):
                 ret.append((wow_get_chieve(c, None, None, " ".join(message_words[1:])), False))
@@ -569,7 +571,6 @@ def dispatch_message(incomingMessage, fromChannel):
             except:
                 ret.append(("Something went wrong getting or parsing the item", False))
                 logging.error(sys.exc_info())
-
         elif message_words[0] == "hs" and len(message_words) > 1:
             card_name = None
             remaining_words = " ".join(message_words[1:])

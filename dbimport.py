@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Import cards from JSON into SQLite DB."""
 
-import pysqlite2.dbapi2 as sqlite
+import sqlite3 as sqlite
 import sys, json, pickle
 try:
     from wow_db_data import *
@@ -139,10 +139,13 @@ if __name__ == '__main__':
                 )""")
             print len(hs_cards)
             for card in hs_cards:
-                c.execute("""
+                try:
+                    c.execute("""
                         INSERT INTO hearthstonecards VALUES (
                             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                         )""", (card['id'], card['name']['enUS'], card.get('text', {}).get('enUS', ''), card.get('rarity', '').title(), card.get('type', '').title(), card.get('cost', 0), card.get('attack', 0), card.get('health', 0), card.get('set', ''), card.get('artist', ''), card.get('flavor', {}).get('enUS', ''), ', '.join(card.get('mechanics', [])), card.get('race', '').title(), card.get('durability', 0)))
+                except KeyError:
+                    print card
             c.execute('CREATE INDEX hscardname ON hearthstonecards (name)')
             conn.commit()
         except IOError:
@@ -211,7 +214,6 @@ if __name__ == '__main__':
     if numCards < 1:
         # Load in all the realms
         try:
-            from wow_db_data import *
             c.execute("DROP TABLE IF EXISTS wowrealms")
             c.execute("""
                 CREATE TABLE wowrealms (

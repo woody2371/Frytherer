@@ -7,3 +7,4 @@ cachetools
 pyparsing
 fuzzywuzzy
 python-Levenshtein
+lxml
