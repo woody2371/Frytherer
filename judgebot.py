@@ -8,7 +8,7 @@ Comprehensive Rules and other such useful garbage
 import random, sys, string
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
-from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard, wow_get_dude, wow_get_chieve, wow_check_chieve, split_wow_words
+from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard, wow_get_dude, wow_get_chieve, wow_check_chieve, split_wow_words, get_store_events
 from slackbot.bot import Bot
 from slackbot.bot import respond_to
 from slackbot.bot import listen_to
@@ -81,6 +81,7 @@ for rule in rules:
     all_rules[x[0]] = ". ".join(x[1:])
 del rules
 
+
 def messagekey(message, *args, **kwargs):   # pragma: no cover
     """Custom hashing function for LRU Cache."""
     key = hashkey(*args, **kwargs)
@@ -143,6 +144,7 @@ math_total = math_mode + math_operator
 
 total_thing = Combine((colon_total | colon_or_bang_total | math_total) + operand)
 super_total = OneOrMore(Optional(OneOrMore(boolean_operators)) + Optional(OneOrMore(brackets)) + total_thing + Optional(OneOrMore(brackets)) + Optional(OneOrMore(boolean_operators)))
+
 
 def guessCardName(message, card_tokens):
     # TODO: Be better with the [f(x) for x if f(x)] efficiency
@@ -410,7 +412,7 @@ def dispatch_message(incomingMessage, fromChannel):
         elif message_words[0] == "helpsearch":
             ret.append((helpsearch(), True))
         elif message_words[0] == "events":
-            events = pickle.load(file)
+            ret.append((get_store_events(" ".join(message_words[1:])), False))
         elif message_words[0] == "wowchieve":
             if wow_check_chieve(c, " ".join(message_words[1:])):
                 ret.append((wow_get_chieve(c, None, None, " ".join(message_words[1:])), False))

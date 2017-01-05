@@ -5,7 +5,7 @@
 This module contains all the helper functions for the
 Frytherer command line interface and the Slackbot
 """
-import ast, string, sys, requests, json
+import ast, string, sys, requests, json, pickle
 from itertools import product
 from operator import and_, or_
 try:
@@ -27,6 +27,28 @@ except ImportError:
 mana_regexp = re.compile('([0-9]*)(b*)(g*)(r*)(u*)(w*)')
 section_regexp = re.compile('a{0,1}(ipg|mtr) (?:(appendix [a-z])|(\d+)(?:(?:\.)(\d{1,2})){0,1})')
 single_quoted_word = re.compile('^(?:\"|\')\w+(?:\"|\')$')
+
+
+def retrieve_store_events(store):
+    logging.info("Store events cache get")
+    with open('events.obj', 'rb') as f:
+        stores = pickle.load(f)
+        if store in stores:
+            return stores[store]
+        return None
+
+store_cache = TTLCache(maxsize=100, ttl=86400, missing=retrieve_store_events)
+
+
+def get_store_events(store):
+    events = store_cache[store]
+    if events:
+        ret = "Upcoming events:\n"
+        for event in events:
+            ret += "{}: {} for {} ({})\n".format(event['date'].date(), event['event'], event['feeds'], event['format'])
+        return ret
+    else:
+        return "Store not found or no events scheduled"
 
 
 def split_wow_words(cursor, words):
