@@ -30,22 +30,29 @@ single_quoted_word = re.compile('^(?:\"|\')\w+(?:\"|\')$')
 
 
 def retrieve_store_events(store):
+    """If we haven't already cached it, open the pickled event file and read in the store's events"""
     logging.info("Store events cache get")
     with open('events.obj', 'rb') as f:
         stores = pickle.load(f)
-        if store in stores:
-            return stores[store]
-        return None
+        (store_name, store_score) = process.extractOne(store, stores.keys())
+        if store_score > 70:
+            return (store_name, stores[store_name])
+        else:
+            return (store, None)
 
-store_cache = TTLCache(maxsize=100, ttl=86400, missing=retrieve_store_events)
+store_cache = TTLCache(maxsize=100, ttl=14400, missing=retrieve_store_events)
 
 
 def get_store_events(store):
-    events = store_cache[store]
+    """Try and get the events from the cache, and format them nicely"""
+    (storename, events) = store_cache[store]
     if events:
-        ret = "Upcoming events:\n"
+        ret = "Upcoming events at {}:\n".format(storename.title())
         for event in events:
-            ret += "{}: {} for {} ({})\n".format(event['date'].date(), event['event'], event['feeds'], event['format'])
+            if event['format'] == "GP":
+                ret += "{}: {} ({}){}\n".format(event['date'].date(), event['event'], event['format'], (" <"+event['event_link']+"|:fb-event:>" if event['event_link'] else ""))
+            else:
+                ret += "{}: {} for {} ({}){}\n".format(event['date'].date(), event['event'], event['feeds'], event['format'], (" <"+event['event_link']+"|:fb-event:>" if event['event_link'] else ""))
         return ret
     else:
         return "Store not found or no events scheduled"
@@ -1051,6 +1058,7 @@ def help():
     ret += "url <cr|(a)mtr <section>|(a)ipg <section>|<infraction>|jar|peip|pptq|rptq|alldocs> - gives the URL to the requested document\n"
     ret += "flavour <card> - gives flavour text of a card.\n"
     ret += "ruling <card> [number] - gives a specific Gatherer ruling of a card.\n"
+    ret += "events <storename> - gives upcoming premiere-level events at the given store.\n"
     # ret += "\tallcards <set> - gives a list of all the cards with a given set code (use printsets to get the code)\n"
     # ret += "\tallcardsextend <set> - gives the text of all the cards with a given set code (use printsets to get the code)\n"
     # ret += "\tbooster <set> - gives a randomly generated booster from either set code, or set name\n"
