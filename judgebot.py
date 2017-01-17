@@ -329,14 +329,20 @@ def guessCardName(message, card_tokens):
                     foundMaxRatio = 0
                     foundMaxName = ""
                     for b1 in backup1:
+                        # logging.debug("Trying {} in backup1".format(b1))
+                        # logging.debug("Best yet: {} {} {}".format(foundMax, foundMaxRatio, foundMaxName))
                         if b1[1] >= 85 and b1[1] >= foundMax:
                             foundMax = b1[1]
-                            r = fuzz.ratio(b1[0][:len(backup_card_name)], backup_card_name)
+                            #r = fuzz.ratio(b1[0][:len(backup_card_name)], backup_card_name)
+                            r = fuzz.ratio(b1[0], backup_card_name)
+                            # logging.debug("Lookin good: {} {}".format(foundMax, r))
                             if r > foundMaxRatio:
                                 foundMaxRatio = r
                                 foundMaxName = b1[0]
+                                # logging.debug("Inside job {} {}".format(foundMaxRatio, foundMaxName))
                     if foundMax:
                         logging.warning("Using Backup 1")
+                        # logging.debug("Boom? {} {} {}".format(foundMax, foundMaxRatio, foundMaxName))
                         cards_found.append('en:"%s"' % foundMaxName)
                         break
                 if backup2:
@@ -766,8 +772,8 @@ def dispatch_message(incomingMessage, fromChannel):
                 cards = cardSearch(c, terms)
                 logging.debug("Found {} cards".format(len(cards)))
                 if len(cards) > 20:
-                    ret.append(("Too many cards to print! ({} > 20). Please narrow search".format(len(cards)), False))
-                if len(cards) <= 2 or not fromChannel:
+                    ret = [("Too many cards to print! ({} > 20). Please narrow search".format(len(cards)), False)]
+                elif len(cards) <= 2 or not fromChannel:
                     ret.append(("\n".join([printCard(c, card, quick=False, slackChannel=fromChannel) for card in cards]), False))
                 else:
                     ret.extend([("{} results sent to PM".format(len(cards)), False), ("\n".join([printCard(c, card, quick=False, slackChannel=fromChannel) for card in cards]), True)])

@@ -1159,9 +1159,9 @@ def url(document):
     elif doc_words[0] == "alldocs":
         ret = "http://wpn.wizards.com/en/resources/rules-documents"
     elif doc_words[0] == "pptq":
-        ret = "http://magic.wizards.com/en/events/instoreplay/pptqaer"
+        ret = "<http://magic.wizards.com/en/events/instoreplay/pptqakh|AKH> and then <http://magic.wizards.com/en/events/instoreplay/pptqhou|HOU>"
     elif doc_words[0] == "rptq":
-        ret = "http://magic.wizards.com/en/events/instoreplay/rptqaer"
+        ret = "<http://magic.wizards.com/en/events/instoreplay/rptqakh|AKH> and then <http://magic.wizards.com/en/events/instoreplay/rptqhou|HOU>"
     elif doc_words[0] == "mt" or " ".join(doc_words[0:2]) == "missed trigger":
         ret = "http://blogs.magicjudges.org/rules/ipg2-1/"
     elif doc_words[0] == "l@ec" or doc_words[0] == "lec" or " ".join(document[0:3]) == "looking at extra cards":
@@ -1274,9 +1274,9 @@ def url(document):
             logging.debug(sys.exc_info())
             ret = "Something went wrong parsing your request"
     elif doc_words[0] == "mtr":
-        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_mtr_30sep16_en.pdf"
+        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_mtr_20jan17_en.pdf"
     elif doc_words[0] == "ipg":
-        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_ipg_30sep16_en.pdf"
+        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_ipg_20jan17_en_0.pdf"
     elif doc_words[0] == "aipg":
         ret = "http://blogs.magicjudges.org/rules/ipg/"
     elif doc_words[0] == "amtr":
