@@ -147,6 +147,7 @@ super_total = OneOrMore(Optional(OneOrMore(boolean_operators)) + Optional(OneOrM
 
 
 def guessCardName(message, card_tokens):
+    """Given a list of words, guess if it matches a magic card"""
     # TODO: Be better with the [f(x) for x if f(x)] efficiency
     logging.debug("Guessing! {}".format(card_tokens))
     cards_found = []
@@ -240,6 +241,10 @@ def guessCardName(message, card_tokens):
             v4 = process.extractOne(card_name, allCardNames, scorer=fuzz.token_set_ratio)
 
             logging.debug("Attempted Mulligan into {} {}".format(v2, v4))
+            if len(card_tokens[:i]) == 2 and card_tokens[0] in allCardNames and quick_guess_ratio <= 90:
+                logging.debug("The CanCon Special")
+                cards_found.append('en:"{}"'.format(card_tokens[0]))
+                break
             if v2[1] >= 80 and v4[1] >= 80:
                 # Does our input appear entirely in our better guesses?
                 if card_name.replace(" ", "") in v2[0].replace(" ", ""):
@@ -823,7 +828,7 @@ def find_pm_channel(message):  # pragma: no cover
     return None
 
 
-@listen_to('!(\w+)')
+@listen_to('!(.*)')
 def handle_public_message(message, message_text):  # pragma: no cover
     """Listen to the channels, respond to something that looks like a command."""
     logging.debug("Received a public command from {}.  Raw text: {}".format(message._client.users[message.body['user']]['real_name'], message.body['text']))
@@ -832,7 +837,7 @@ def handle_public_message(message, message_text):  # pragma: no cover
     except KeyError:
         logging.debug("Private channel ID {}".format(message.body['channel']))
 
-    replies = dispatch_message((message.body['text']).lower().rstrip().replace("’", "'"), fromChannel=True)
+    replies = dispatch_message((message.body['text']).lower().rstrip().replace("’", "'").replace("@testingjudgebot", "").replace("@judgebot", "!").replace("judgebot ", "").replace("judgebot", ""), fromChannel=True)
     if type(replies) is not list:
         replies = [replies]
     for reply in replies:
@@ -863,9 +868,14 @@ def handle_public_message(message, message_text):  # pragma: no cover
 def handle_private_message(message, message_text):  # pragma: no cover
     """Receive a private message from the user and figure out how to respond."""
     logging.debug("Received private message from %s.  Raw text: %s" % (message._client.users[message.body['user']]['real_name'], message.body['text']))
+
     if "!" not in message_text:
         logging.debug("Adding leading !")
         message.body['text'] = "!" + message.body['text']
+
+    if 'name' in message.channel._body:
+        handle_public_message(message, message_text)
+        return
 
     replies = dispatch_message(message.body['text'].lower().rstrip().replace("’", "'"), fromChannel=False)
     if type(replies) is not list:

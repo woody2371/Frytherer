@@ -8,6 +8,9 @@ try:
 except ImportError:
     print "No WOW data available"
 
+
+# "https://raw.githubusercontent.com/taw/magic-search-engine/master/data/AllSets-x.json"
+
 if __name__ == '__main__':
     try:
         conn = sqlite.connect('frytherer.db', check_same_thread=False)

@@ -404,7 +404,7 @@ if __name__ == '__main__':
                     print ", ".join(Colors)
             #print card["rarity"]
             print " ".join(Supertypes) + (" " if Supertypes else "") + " ".join(Types) + (" - " if Subtypes else "") + " ".join(Subtypes)
-            if "Creature" in Types:
+            if "Creature" in Types or "Vehicle" in Subtypes:
                 print card["power"] + "/" + card["toughness"]
             if "Planeswalker" in Types:
                 print "[" + str(card["loyalty"]) + "]"
