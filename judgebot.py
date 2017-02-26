@@ -194,22 +194,22 @@ def guessCardName(message, card_tokens):
         if quick_guess_ratio > 85 and quick_guess_card in card_name and len(quick_guess_card) > 5:
             # 85% for borborygmos, en
             # Does our input appear entirely in our guess?
-            logging.error("Early Exit Fry Style")
+            logging.debug("Early Exit Fry Style")
             cards_found.append('en:"{}"'.format(quick_guess_card))
             break
         if quick_guess_ratio >= 75 and card_name in quick_guess_card and len(quick_guess_card) > 5 and card_name != "goblin":
             # 75% for Take Poss vs Take Possession (was 90)
             # Does our guess appear entirely in our input?
-            logging.error("Early Exit Woody Style")
+            logging.debug("Early Exit Woody Style")
             cards_found.append('en:"{}"'.format(quick_guess_card))
             break
         prefix_check = [c for c in allCardNames if c.startswith(card_name)]
         if len(prefix_check) == 1:
-            logging.error("Prefix Check!")
+            logging.debug("Prefix Check!")
             cards_found.append('en:"{}"'.format(prefix_check[0]))
             break
         elif len(prefix_check) >= 5:
-            logging.error("Too many prefixes!")
+            logging.debug("Too many prefixes!")
             return ["en:" + c for c in prefix_check]
         if type(card_name) is unicode:
             card_name_no_punctuation = card_name.translate({ord(c): None for c in string.punctuation})
@@ -217,7 +217,7 @@ def guessCardName(message, card_tokens):
             card_name_no_punctuation = card_name.translate(string.maketrans("", ""), string.punctuation)
         prefix_check_2 = [c for c in allCardNames if c.startswith(card_name_no_punctuation)]
         if len(prefix_check_2) == 1:
-            logging.error("Prefix Check No Punctuation!")
+            logging.debug("Prefix Check No Punctuation!")
             cards_found.append('en:"{}"'.format(prefix_check_2[0]))
             break
         # TOOD: listOfCardsToCheck = (prefix_check + prefix_check_2) or allCardNames
@@ -226,12 +226,12 @@ def guessCardName(message, card_tokens):
             legends = process.extract(card_name, allLegendaries, scorer=fuzz.token_set_ratio)
             starting_legends = filter(lambda x: x[0].startswith(card_name), legends)
             if len(starting_legends) == 1 and starting_legends[0][1] == 100:
-                logging.error("Legendary YOLO")
+                logging.debug("Legendary YOLO")
                 cards_found.append('en:"{}"'.format(starting_legends[0][0]))
                 break
         if len(card_name) >= 4 and quick_guess_ratio > 64 and fuzz.partial_ratio(card_name, quick_guess_card) == 100:
             # 64% for "valakut"
-            logging.error("Good enough for Government work")
+            logging.debug("Good enough for Government work")
             cards_found.append('en:"{}"'.format(quick_guess_card))
             break
         if quick_guess_ratio >= 80:
@@ -241,29 +241,30 @@ def guessCardName(message, card_tokens):
             v4 = process.extractOne(card_name, allCardNames, scorer=fuzz.token_set_ratio)
 
             logging.debug("Attempted Mulligan into {} {}".format(v2, v4))
-            if len(card_tokens[:i]) == 2 and card_tokens[0] in allCardNames and quick_guess_ratio <= 90:
-                logging.debug("The CanCon Special")
-                cards_found.append('en:"{}"'.format(card_tokens[0]))
+            first_word_no_punct = card_tokens[0].translate({ord(c): None for c in string.punctuation})
+            if len(card_tokens[:i]) == 2 and first_word_no_punct in allCardNames and quick_guess_ratio <= 90:
+                logging.warning("The CanCon Special")
+                cards_found.append('en:"{}"'.format(first_word_no_punct))
                 break
             if v2[1] >= 80 and v4[1] >= 80:
                 # Does our input appear entirely in our better guesses?
                 if card_name.replace(" ", "") in v2[0].replace(" ", ""):
-                    logging.error("Poop")
+                    logging.debug("Poop")
                     cards_found.append('en:"{}"'.format(v2[0]))
                     break
                 elif card_name.replace(" ", "") in v4[0].replace(" ", ""):
-                    logging.error("Poop2")
+                    logging.debug("Poop2")
                     cards_found.append('en:"{}"'.format(v4[0]))
                     break
             if v2[0] != quick_guess_card and v2[0] == v4[0] and v2[1] > quick_guess_ratio and len(v2[0]) > len(quick_guess_card):
                 cards_found.append('en:"{}"'.format(v2[0]))
-                logging.warning("Mulligan success!")
+                logging.debug("Mulligan success!")
                 break
             elif v2[0] == quick_guess_card and v4[0] == quick_guess_card:
                 vx = [(x, fuzz.token_sort_ratio(x[:len(card_name)], card_name)) for x in allCardNames if (fuzz.token_sort_ratio(x[:len(card_name)], card_name) > 95)]
                 if vx and vx[0][0] != v2[0]:
                     cards_found.append('en:"{}"'.format(vx[0][0]))
-                    logging.warning("WILD CARD BITCHES!")
+                    logging.debug("WILD CARD BITCHES!")
                 else:
                     logging.warning("Mulligan override!")
                     cards_found.append('en:"{}"'.format(quick_guess_card))
@@ -276,7 +277,7 @@ def guessCardName(message, card_tokens):
                     best = max(backupCard, key=lambda x: x[1])
                     logging.debug("Backing up with {}".format(best))
                     if (len(best[0]) >= len(quick_guess_card)):
-                        logging.warning("It's good!")
+                        logging.debug("It's good!")
                         cards_found.append('en:"%s"' % best[0])
                         break
                 else:
@@ -302,7 +303,7 @@ def guessCardName(message, card_tokens):
         elif quick_guess_ratio >= 60:
             v2 = process.extractOne(card_name, allLegendaries, scorer=fuzz.partial_ratio)
             if v2[1] >= 90 and v2[0] == quick_guess_card:
-                logging.warning("Wat")
+                logging.debug("Wat")
                 cards_found.append('en:"{}"'.format(quick_guess_card))
                 break
     # We tried all the words down to one and no matches. Try a bunch of bullshit
@@ -338,7 +339,7 @@ def guessCardName(message, card_tokens):
                         # logging.debug("Best yet: {} {} {}".format(foundMax, foundMaxRatio, foundMaxName))
                         if b1[1] >= 85 and b1[1] >= foundMax:
                             foundMax = b1[1]
-                            #r = fuzz.ratio(b1[0][:len(backup_card_name)], backup_card_name)
+                            # r = fuzz.ratio(b1[0][:len(backup_card_name)], backup_card_name)
                             r = fuzz.ratio(b1[0], backup_card_name)
                             # logging.debug("Lookin good: {} {}".format(foundMax, r))
                             if r > foundMaxRatio:
