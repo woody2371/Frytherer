@@ -1227,7 +1227,7 @@ def url(document):
                     else:
                         sub = int(sub)
                         if(
-                            (main == 1 and (sub >= 1 and sub <= 4)) or
+                            (main == 1 and (sub >= 1 and sub <= 5)) or
                             (main == 2 and (sub >= 1 and sub <= 6)) or
                             (main == 3 and (sub >= 1 and sub <= 8)) or
                             (main == 4 and (sub >= 1 and sub <= 8))
