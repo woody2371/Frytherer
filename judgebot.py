@@ -26,7 +26,7 @@ from fuzzywuzzy import process, fuzz
 from HTMLParser import HTMLParser
 from bs4 import BeautifulSoup, Comment
 import json as basicjson
-
+from raven.handlers.logging import SentryHandler
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
