@@ -30,6 +30,8 @@ import json as basicjson
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
+l = logging.getLogger()
+l.addHandler(SentryHandler('', level=logging.WARNING))
 
 cache = LRUCache(maxsize=100)
 lock = RLock()
