@@ -30,4 +30,4 @@ for f in ['/tmp/events.html', '/tmp/events2.html']:
 
 pickle.dump(stores, open('events.obj', 'w'))
 
-print stores.keys()
+# print stores.keys()

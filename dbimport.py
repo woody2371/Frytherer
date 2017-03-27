@@ -106,6 +106,9 @@ if __name__ == '__main__':
         c.execute('CREATE INDEX cardtypesindex ON cards (types)')
         conn.commit()
 
+    # Hearthstone.
+    # Current version: 17994
+
     numCards = -1
 
     # Check if the database actually has stuff
@@ -143,10 +146,11 @@ if __name__ == '__main__':
             print len(hs_cards)
             for card in hs_cards:
                 try:
-                    c.execute("""
-                        INSERT INTO hearthstonecards VALUES (
-                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-                        )""", (card['id'], card['name']['enUS'], card.get('text', {}).get('enUS', ''), card.get('rarity', '').title(), card.get('type', '').title(), card.get('cost', 0), card.get('attack', 0), card.get('health', 0), card.get('set', ''), card.get('artist', ''), card.get('flavor', {}).get('enUS', ''), ', '.join(card.get('mechanics', [])), card.get('race', '').title(), card.get('durability', 0)))
+                    if 'name' in card:
+                        c.execute("""
+                            INSERT INTO hearthstonecards VALUES (
+                                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                            )""", (card['id'], card['name']['enUS'], card.get('text', {}).get('enUS', ''), card.get('rarity', '').title(), card.get('type', '').title(), card.get('cost', 0), card.get('attack', 0), card.get('health', 0), card.get('set', ''), card.get('artist', ''), card.get('flavor', {}).get('enUS', ''), ', '.join(card.get('mechanics', [])), card.get('race', '').title(), card.get('durability', 0)))
                 except KeyError:
                     print card
             c.execute('CREATE INDEX hscardname ON hearthstonecards (name)')
