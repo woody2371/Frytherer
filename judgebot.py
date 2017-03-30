@@ -31,7 +31,7 @@ from raven.handlers.logging import SentryHandler
 import logging
 logging.basicConfig(level=logging.DEBUG)
 l = logging.getLogger()
-l.addHandler(SentryHandler('', level=logging.WARNING))
+
 
 cache = LRUCache(maxsize=100)
 lock = RLock()
@@ -119,7 +119,7 @@ split_card_regex = re.compile(r'(.*?)\s*//\s*(.*)')
 non_text_regex = re.compile(r'^[^\w]+$')
 # word_ending_in_bang = re.compile(r'\w+! ')
 # word_starting_with_bang = re.compile(r'[^\w]!(?: *)\w+')
-word_ending_in_bang = re.compile(r'\S+! ')
+word_ending_in_bang = re.compile(r'\S+!(?: |\n)')
 word_starting_with_bang = re.compile(r'\s+!(?: *)\S+')
 gathererRuling_regex = re.compile(r'^(?:(?P<start_number>\d+) ?(?P<name>.+)|(?P<name2>.*?) ?(?P<end_number>\d+).*?|(?P<name3>.+))')
 
@@ -384,10 +384,10 @@ def dispatch_message(incomingMessage, fromChannel):
     incomingMessage = h.unescape(incomingMessage)
     logging.debug("Dispatching message: {} (Channel: {})".format(incomingMessage, fromChannel))
     if word_ending_in_bang.search(incomingMessage) and not word_starting_with_bang.search(incomingMessage):
-        logging.warning("WEIB Skip")
+        logging.debug("WEIB Skip")
         return []
     if "!!" in incomingMessage:
-        logging.warning("Double Bang Skip")
+        logging.debug("Double Bang Skip")
         return []
     command_list = bot_command_regex.findall(incomingMessage)
     logging.debug("Command list: {}".format(command_list))
