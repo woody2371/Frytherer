@@ -393,7 +393,7 @@ def dispatch_message(incomingMessage, fromChannel):
     ret = []
     for (idx, message) in enumerate(command_list):
         if non_text_regex.match(message) or message.startswith("  "):
-            logging.warning("Iffy skip")
+            logging.debug("Iffy skip")
             continue
         message = message.strip()
         if re.match(single_quoted_word, message):

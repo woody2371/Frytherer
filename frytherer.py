@@ -5,7 +5,7 @@
 This module contains all the helper functions for the
 Frytherer command line interface and the Slackbot
 """
-import ast, string, sys, requests, json, pickle
+import ast, string, sys, requests, json, pickle, datetime
 from itertools import product
 from operator import and_, or_
 try:
@@ -45,17 +45,52 @@ store_cache = TTLCache(maxsize=100, ttl=14400, missing=retrieve_store_events)
 
 def get_store_events(store):
     """Try and get the events from the cache, and format them nicely"""
+    if store == "today":
+        return get_events_for_date("today")
+
+    try:
+        datetime.datetime.strptime(store, "%Y-%m-%d")
+        return get_events_for_date(store)
+    except ValueError:
+        pass
+
     (storename, events) = store_cache[store]
     if events:
         ret = "Upcoming events at {}:\n".format(storename.title())
         for event in events:
             if event['format'] == "GP":
-                ret += "{}: {} ({}){}\n".format(event['date'].date(), event['event'], event['format'], (" <"+event['event_link']+"|:fb-event:>" if event['event_link'] else ""))
+                ret += "{}: {} ({}){}\n".format(event['date'].date(), event['event'], event['format'], (" <" + event['event_link'] + "|:fb-event:>" if event['event_link'] else ""))
             else:
-                ret += "{}: {} for {} ({}){}\n".format(event['date'].date(), event['event'], event['feeds'], event['format'], (" <"+event['event_link']+"|:fb-event:>" if event['event_link'] else ""))
+                ret += "{}: {} for {} ({}){}\n".format(event['date'].date(), event['event'], event['feeds'], event['format'], (" <" + event['event_link'] + "|:fb-event:>" if event['event_link'] else ""))
         return ret
     else:
         return "Store not found or no events scheduled"
+
+
+def get_events_for_date(date):
+    """Retrieve all the events for the given date"""
+    if date == "today":
+        t = datetime.date.today()
+        t = datetime.datetime(t.year, t.month, t.day)
+    else:
+        try:
+            t = datetime.datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            return "Unable to parse date"
+
+    ret = "Events on {}:\n".format(t.date().isoformat())
+
+    with open('events.obj', 'rb') as f:
+        stores = pickle.load(f)
+        for (store, events) in stores.items():
+            store_cache.update([(store, events)])
+            for event in events:
+                if event['date'] == t:
+                    if event['format'] == "GP":
+                        ret += "{}: {} ({}){}\n".format(store.title(), event['event'], event['format'], (" <" + event['event_link'] + "|:fb-event:>" if event['event_link'] else ""))
+                    else:
+                        ret += "{}: {} for {} ({}){}\n".format(store.title(), event['event'], event['feeds'], event['format'], (" <" + event['event_link'] + "|:fb-event:>" if event['event_link'] else ""))
+    return ret
 
 
 def split_wow_words(cursor, words):
@@ -1080,7 +1115,7 @@ def help():
     ret += "url <cr|(a)mtr <section>|(a)ipg <section>|<infraction>|jar|peip|pptq|rptq|alldocs> - gives the URL to the requested document\n"
     ret += "flavour <card> - gives flavour text of a card.\n"
     ret += "ruling <card> [number] - gives a specific Gatherer ruling of a card.\n"
-    ret += "events <storename> - gives upcoming premiere-level events at the given store.\n"
+    ret += "events <storename|date|today> - gives upcoming premiere-level events at the given store, or on the given date (in ISO Format e.g 2017-01-01, or the word 'today').\n"
     ret += "rounds <player_count> - gives the MTR recommended number of rounds for the given number of players/teams.\n"
     # ret += "\tallcards <set> - gives a list of all the cards with a given set code (use printsets to get the code)\n"
     # ret += "\tallcardsextend <set> - gives the text of all the cards with a given set code (use printsets to get the code)\n"
