@@ -8,7 +8,7 @@ Comprehensive Rules and other such useful garbage
 import random, sys, string
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
-from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard, wow_get_dude, wow_get_chieve, wow_check_chieve, split_wow_words, get_store_events
+from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard, wow_get_dude, wow_get_chieve, wow_check_chieve, split_wow_words, get_store_events, rounds_for_players
 from slackbot.bot import Bot
 from slackbot.bot import respond_to
 from slackbot.bot import listen_to
@@ -90,17 +90,16 @@ def messagekey(message, *args, **kwargs):   # pragma: no cover
     key += (message.body['user'],)
     return key
 
-# TODO: PPTQ Stuff
+# TODO:
 # Legalities in card output
 # !Rulings & !flavour & !reminder etc
-# Better fuzzy matching
-# Test suite (for regressions)
 # Match all our commands inside a message D:
 # Don't retrieve a billion cards only to tell the user that it's too many to show. Do a COUNT() first
 # n:One Two Three should probably be handled as n:"One Two Three"
 # Foreign search
 # Rules parsing to include examples
 # Rule search to return multiple possible rules
+# Flavour search to return multiple possible unique flavours
 
 
 def intersperse(delimiter, seq):  # pragma: no cover
@@ -117,11 +116,11 @@ bot_command_regex = re.compile(r'[!&]([^!&]+)')
 single_quoted_word = re.compile(r'^(?:\"|\')\w+(?:\"|\')$')
 split_card_regex = re.compile(r'(.*?)\s*//\s*(.*)')
 non_text_regex = re.compile(r'^[^\w]+$')
-# word_ending_in_bang = re.compile(r'\w+! ')
-# word_starting_with_bang = re.compile(r'[^\w]!(?: *)\w+')
 word_ending_in_bang = re.compile(r'\S+!(?: |\n)')
 word_starting_with_bang = re.compile(r'\s+!(?: *)\S+')
 gathererRuling_regex = re.compile(r'^(?:(?P<start_number>\d+) ?(?P<name>.+)|(?P<name2>.*?) ?(?P<end_number>\d+).*?|(?P<name3>.+))')
+ruling_flavour_regex = re.compile(r'^((?:flavo(?:u{0,1})r(?: |s ))|(?:ruling(?: |s )))', re.I)
+rounds_regex = re.compile(r'^rounds (\d+)$', re.I)
 
 
 def validate_colon_mode(s, loc, tokens):
@@ -735,7 +734,12 @@ def dispatch_message(incomingMessage, fromChannel):
                 rs = [rs]
             for r in rs:
                 ret.append((r, False))
-        elif message.startswith(("flavour ", "flavor ", "ruling ", "rulings ")):
+        elif rounds_regex.match(message):
+            logging.debug("Round for player query")
+            players = int(rounds_regex.match(message).groups()[0])
+            ret.append((rounds_for_players(players), False))
+        # elif message.startswith(("flavour ", "flavor ", "ruling ", "rulings ")):
+        elif ruling_flavour_regex.match(message):
             # Use regex to put all the parts of the message in accessible parts
             command = card_tokens[0]
             logging.debug(command + " text!")

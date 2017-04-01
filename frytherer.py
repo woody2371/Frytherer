@@ -1042,6 +1042,28 @@ def ruleSearch(all_rules, rule_to_search):
     return "No rule/s found"
 
 
+def rounds_for_players(players):
+    """Calculate the recommended number of rounds for tournaments"""
+    if players < 8:
+        return "Unsanctionable, do whatever you want!"
+    if players == 8:
+        return "3 Single-Elimination Playoff Rounds (No Swiss)"
+    if players >= 9 and players <= 16:
+        return "4 Swiss Rounds (if Limited Format with Booster Draft in Playoff), 5 Swiss Rounds (All Other Formats).  Top 8 (If Limited Format with Booster Draft in Playoff), Top 4 (All Other Formats)"
+    if players >= 17 and players <= 32:
+        return "5 Swiss Rounds, Top 8"
+    if players >= 33 and players <= 64:
+        return "6 Swiss Rounds, Top 8"
+    if players >= 65 and players <= 128:
+        return "7 Swiss Rounds, Top 8"
+    if players >= 129 and players <= 226:
+        return "8 Swiss Rounds, Top 8"
+    if players >= 227 and players <= 409:
+        return "9 Swiss Rounds, Top 8"
+    if players > 410:
+        return "10 Swiss Rounds, Top 8"
+
+
 def help():
     """Print out help message."""
     ret = ""
@@ -1059,6 +1081,7 @@ def help():
     ret += "flavour <card> - gives flavour text of a card.\n"
     ret += "ruling <card> [number] - gives a specific Gatherer ruling of a card.\n"
     ret += "events <storename> - gives upcoming premiere-level events at the given store.\n"
+    ret += "rounds <player_count> - gives the MTR recommended number of rounds for the given number of players/teams.\n"
     # ret += "\tallcards <set> - gives a list of all the cards with a given set code (use printsets to get the code)\n"
     # ret += "\tallcardsextend <set> - gives the text of all the cards with a given set code (use printsets to get the code)\n"
     # ret += "\tbooster <set> - gives a randomly generated booster from either set code, or set name\n"
