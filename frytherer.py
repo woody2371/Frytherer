@@ -802,6 +802,19 @@ def cardSearch(cursor, t, limit=None, random=False):
         return cards
 
 
+def printSpoilerCard(cursor, cardname):
+    """Given a spoilered card name, return a string"""
+    logging.debug(cardname)
+    card = cursor.execute("SELECT * FROM spoilers WHERE name LIKE ?", (cardname,)).fetchone()
+    message_out = ""
+    if card:
+        message_out += "*" + card["name"] + "* | "
+        message_out += card["text"].replace('\n', ' | ')
+    else:
+        message_out = "Card not found!?"
+    return message_out
+
+
 def printHSCard(cursor, cardname):
     """Given a hearthstone card name, return a string"""
     logging.debug(cardname)
@@ -1217,9 +1230,9 @@ def url(document):
     elif doc_words[0] == "alldocs":
         ret = "http://wpn.wizards.com/en/resources/rules-documents"
     elif doc_words[0] == "pptq":
-        ret = "<http://magic.wizards.com/en/events/instoreplay/pptqakh|AKH> and then <http://magic.wizards.com/en/events/instoreplay/pptqhou|HOU>"
+        ret = "<http://magic.wizards.com/en/events/instoreplay/pptqhou|HOU>"
     elif doc_words[0] == "rptq":
-        ret = "<http://magic.wizards.com/en/events/instoreplay/rptqakh|AKH> and then <http://magic.wizards.com/en/events/instoreplay/rptqhou|HOU>"
+        ret = "<http://magic.wizards.com/en/events/instoreplay/rptqhou|HOU>"
     elif doc_words[0] == "mt" or " ".join(doc_words[0:2]) == "missed trigger":
         ret = "http://blogs.magicjudges.org/rules/ipg2-1/"
     elif doc_words[0] == "l@ec" or doc_words[0] == "lec" or " ".join(document[0:3]) == "looking at extra cards":

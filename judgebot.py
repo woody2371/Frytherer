@@ -8,7 +8,7 @@ Comprehensive Rules and other such useful garbage
 import random, sys, string
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
-from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard, wow_get_dude, wow_get_chieve, wow_check_chieve, split_wow_words, get_store_events, rounds_for_players
+from frytherer import cardSearch, printCard, ruleSearch, help, helpsearch, url, dedupe, cardExtendSearch, printHSCard, printSpoilerCard, wow_get_dude, wow_get_chieve, wow_check_chieve, split_wow_words, get_store_events, rounds_for_players
 from slackbot.bot import Bot
 from slackbot.bot import respond_to
 from slackbot.bot import listen_to
@@ -58,9 +58,14 @@ try:
 
     c.execute('SELECT DISTINCT(name) FROM hearthstonecards')
     allHSCardNamesWithCase = [y[0] for y in c.fetchall()]
-    allHSCardNames = [y[0].lower() for y in allHSCardNamesWithCase]
+    allHSCardNames = [y.lower() for y in allHSCardNamesWithCase]
     numHSCards = len(allHSCardNames)
     logging.debug("Also found %d Hearthstone Cards" % numHSCards)
+
+    c.execute('SELECT DISTINCT(name) FROM spoilers')
+    allSpoilerCardNamesWithCase = [y[0] for y in c.fetchall()]
+    allSpoilerCardNames = [y.lower() for y in allSpoilerCardNamesWithCase]
+    logging.debug("Also found {} Spoilered Cards".format(len(allSpoilerCardNames)))
 except sqlite.OperationalError:  # pragma: no cover
     logging.error("No cards in DB? Try running dbimport.py")
     sys.exit(1)
@@ -408,8 +413,8 @@ def dispatch_message(incomingMessage, fromChannel):
         if split_card_regex.match(message):
             # Process the left word, slip the right one into the command list
             (left, right) = split_card_regex.match(message).groups()
-            if "http" not in left:
-                logging.warning("Split card detected! {} // {}".format(left, right))
+            if "http" not in left and "spoiler" not in left:
+                logging.info("Split card detected! {} // {}".format(left, right))
                 message = left
                 command_list.insert(idx + 1, right)
             else:
@@ -446,7 +451,7 @@ def dispatch_message(incomingMessage, fromChannel):
         elif message_words[0] == "wow" and len(message_words) > 1:
             item_name = " ".join(message_words[1:])
             try:
-                r = requests.get('http://www.wowhead.com/search?q='+item_name+'&opensearch')
+                r = requests.get('http://www.wowhead.com/search?q={}&opensearch'.format(item_name))
                 if r.status_code == 200:
                     x = basicjson.loads(r.text)
                     if len(x[1]):
@@ -594,15 +599,32 @@ def dispatch_message(incomingMessage, fromChannel):
                 logging.debug("Got HS lucky!")
                 card_name = remaining_words
             else:
-                guessed_cards = process.extract(remaining_words, allHSCardNamesWithCase, scorer=fuzz.ratio)
+                guessed_cards = process.extract(remaining_words, allHSCardNamesWithCase, scorer=fuzz.token_set_ratio)
                 best_guess = guessed_cards[0]
                 if best_guess[1] >= 90:
                     card_name = best_guess[0]
                 else:
-                    #logging.debug(guessed_cards)
+                    # logging.debug(guessed_cards)
                     ret.append(("Unable to find your card, best guesses:\n" + "\n".join([x[0] + " (" + str(x[1]) + "% match)" for x in guessed_cards]), False))
             if card_name:
                 ret.append((printHSCard(c, card_name.lower()), False))
+        elif message_words[0] == "spoiler" and len(message_words) > 1:
+            card_name = None
+            remaining_words = " ".join(message_words[1:])
+            logging.debug("Spoiler Request: {}".format(remaining_words))
+            if remaining_words.lower() in allSpoilerCardNames:
+                logging.debug("Got Spoiler lucky!")
+                card_name = remaining_words
+            else:
+                guessed_cards = process.extract(remaining_words, allSpoilerCardNamesWithCase, scorer=fuzz.token_set_ratio)
+                best_guess = guessed_cards[0]
+                if best_guess[1] >= 90:
+                    card_name = best_guess[0]
+                else:
+                    # logging.debug(guessed_cards)
+                    ret.append(("Unable to find your card, best guesses:\n" + "\n".join([x[0] + " (" + str(x[1]) + "% match)" for x in guessed_cards]), False))
+            if card_name:
+                ret.append((printSpoilerCard(c, card_name.lower()), False))
         elif message in ["d6", "d20", "coin"]:
             if message == "coin":
                 flip = random.randint(0, 1)
