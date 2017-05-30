@@ -5,7 +5,6 @@
 A Slackbot that handles requests for Oracle text,
 Comprehensive Rules and other such useful garbage
 """
-
 import random, sys, string
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
