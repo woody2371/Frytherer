@@ -6,7 +6,6 @@ A Slackbot that handles requests for Oracle text,
 Comprehensive Rules and other such useful garbage
 """
 
-import pdb
 import random, sys, string
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
@@ -65,13 +64,12 @@ try:
     logging.debug("Also found %d Hearthstone Cards" % numHSCards)
 
     c.execute('SELECT DISTINCT(name) FROM spoilers')
-    pdb.set_trace()
     allSpoilerCardNamesWithCase = [y[0] for y in c.fetchall()]
     allSpoilerCardNames = [y.lower() for y in allSpoilerCardNamesWithCase]
     logging.debug("Also found {} Spoilered Cards".format(len(allSpoilerCardNames)))
 except sqlite.OperationalError:  # pragma: no cover
     logging.error("No cards in DB? Try running dbimport.py")
-    #sys.exit(1)
+    sys.exit(1)
 
 c.execute('SELECT DISTINCT(name) FROM cards WHERE type LIKE ? OR type LIKE ? order by type', ('%Legendary%', '%Planeswalker%'))
 allLegendaries = [y[0].lower() for y in c.fetchall()]
