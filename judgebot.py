@@ -5,6 +5,8 @@
 A Slackbot that handles requests for Oracle text,
 Comprehensive Rules and other such useful garbage
 """
+
+import pdb
 import random, sys, string
 import pysqlite2.dbapi2 as sqlite
 from pyparsing import oneOf, OneOrMore, Combine, Word, Literal, Optional, alphanums, dblQuotedString, sglQuotedString, ParseException, ParseFatalException
@@ -63,12 +65,13 @@ try:
     logging.debug("Also found %d Hearthstone Cards" % numHSCards)
 
     c.execute('SELECT DISTINCT(name) FROM spoilers')
+    pdb.set_trace()
     allSpoilerCardNamesWithCase = [y[0] for y in c.fetchall()]
     allSpoilerCardNames = [y.lower() for y in allSpoilerCardNamesWithCase]
     logging.debug("Also found {} Spoilered Cards".format(len(allSpoilerCardNames)))
 except sqlite.OperationalError:  # pragma: no cover
     logging.error("No cards in DB? Try running dbimport.py")
-    sys.exit(1)
+    #sys.exit(1)
 
 c.execute('SELECT DISTINCT(name) FROM cards WHERE type LIKE ? OR type LIKE ? order by type', ('%Legendary%', '%Planeswalker%'))
 allLegendaries = [y[0].lower() for y in c.fetchall()]
@@ -126,6 +129,7 @@ word_starting_with_bang = re.compile(r'\s+!(?: *)\S+')
 gathererRuling_regex = re.compile(r'^(?:(?P<start_number>\d+) ?(?P<name>.+)|(?P<name2>.*?) ?(?P<end_number>\d+).*?|(?P<name3>.+))')
 ruling_flavour_regex = re.compile(r'^((?:flavo(?:u{0,1})r(?: |s ))|(?:ruling(?: |s )))', re.I)
 rounds_regex = re.compile(r'^rounds (\d+)$', re.I)
+dice_regexp = re.compile(r'^d[0-9]*')
 
 
 def validate_colon_mode(s, loc, tokens):
@@ -625,7 +629,7 @@ def dispatch_message(incomingMessage, fromChannel):
                     ret.append(("Unable to find your card, best guesses:\n" + "\n".join([x[0] + " (" + str(x[1]) + "% match)" for x in guessed_cards]), False))
             if card_name:
                 ret.append((printSpoilerCard(c, card_name.lower()), False))
-        elif message in ["d6", "d20", "coin"]:
+        elif dice_regexp.match(message) or message == "coin":
             if message == "coin":
                 flip = random.randint(0, 1)
                 ret.append(("Heads" if flip else "Tails", False))

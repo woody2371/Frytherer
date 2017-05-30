@@ -28,7 +28,6 @@ mana_regexp = re.compile('([0-9]*)(b*)(g*)(r*)(u*)(w*)')
 section_regexp = re.compile('a{0,1}(ipg|mtr) (?:(appendix [a-z])|(\d+)(?:(?:\.)(\d{1,2})){0,1})')
 single_quoted_word = re.compile('^(?:\"|\')\w+(?:\"|\')$')
 
-
 def retrieve_store_events(store):
     """If we haven't already cached it, open the pickled event file and read in the store's events"""
     logging.info("Store events cache get")
