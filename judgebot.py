@@ -126,7 +126,7 @@ word_starting_with_bang = re.compile(r'\s+!(?: *)\S+')
 gathererRuling_regex = re.compile(r'^(?:(?P<start_number>\d+) ?(?P<name>.+)|(?P<name2>.*?) ?(?P<end_number>\d+).*?|(?P<name3>.+))')
 ruling_flavour_regex = re.compile(r'^((?:flavo(?:u{0,1})r(?: |s ))|(?:ruling(?: |s )))', re.I)
 rounds_regex = re.compile(r'^rounds (\d+)$', re.I)
-dice_regexp = re.compile(r'^d[0-9]*')
+dice_regexp = re.compile(r'^d[0-9]+')
 
 
 def validate_colon_mode(s, loc, tokens):
