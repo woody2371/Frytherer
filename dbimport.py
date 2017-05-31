@@ -37,7 +37,7 @@ if __name__ == '__main__':
             with open('AllSets-x.json') as data_file:
                 gatherer = json.load(data_file)
         except IOError:
-            print "Unable to import cards - goodbye"
+            print "Unable to import magil cards - goodbye"
             sys.exit(0)
         c.execute("DROP TABLE IF EXISTS sets")
         c.execute("DROP TABLE IF EXISTS cards")
@@ -156,7 +156,7 @@ if __name__ == '__main__':
             c.execute('CREATE INDEX hscardname ON hearthstonecards (name)')
             conn.commit()
         except IOError:
-            print "Unable to import cards - goodbye"
+            print "Unable to import hearthstone cards - goodbye"
             sys.exit(0)
 
     ##
