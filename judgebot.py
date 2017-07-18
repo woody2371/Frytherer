@@ -917,7 +917,6 @@ def handle_private_message(message, message_text):  # pragma: no cover
             else:
                 message.reply(reply[0])
 
-
 if __name__ == '__main__':   # pragma: no cover
     reload(sys)  # Reload does the trick!
     sys.setdefaultencoding('UTF8')
