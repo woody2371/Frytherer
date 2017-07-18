@@ -28,7 +28,7 @@ from bs4 import BeautifulSoup, Comment
 import json as basicjson
 from raven.handlers.logging import SentryHandler
 
-import logging  
+import logging
 logging.basicConfig(level=logging.DEBUG)
 l = logging.getLogger()
 
@@ -116,7 +116,6 @@ def intersperse(delimiter, seq):  # pragma: no cover
     """
     return islice(chain.from_iterable(izip(repeat(delimiter), seq)), 1, None)
 
-
 rule_regexp = re.compile(r'((?:\d)+\.(?:.*?)\S*)')
 bot_command_regex = re.compile(r'[!&]([^!&]+)')
 single_quoted_word = re.compile(r'^(?:\"|\')\w+(?:\"|\')$')
@@ -135,7 +134,6 @@ def validate_colon_mode(s, loc, tokens):
     # logging.debug("S: {} Loc: {} Toks: {} S[LOC]: {} S[LOC+1]: {}".format(s, loc, tokens, s[loc], s[loc+1]))
     if s[loc + len(tokens[0])] != ':':
         raise ParseFatalException(s, loc, "Mode must be followed by a colon")
-
 
 colon_mode = oneOf("n en o t cn in pow tou cmc r f a banned legal restricted is set").setParseAction(validate_colon_mode)
 colon_or_bang_mode = "c"
