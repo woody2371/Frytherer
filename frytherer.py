@@ -27,6 +27,7 @@ except ImportError:
 mana_regexp = re.compile('([0-9]*)(b*)(g*)(r*)(u*)(w*)')
 section_regexp = re.compile('a{0,1}(ipg|mtr) (?:(appendix [a-z])|(\d+)(?:(?:\.)(\d{1,2})){0,1})')
 single_quoted_word = re.compile('^(?:\"|\')\w+(?:\"|\')$')
+emoji_regexp = re.compile('{\d+}|{[A-Z]}|{\d\/[A-Z]}|{[A-Z]\/[A-Z]}')
 
 
 def retrieve_store_events(store):
@@ -1358,6 +1359,6 @@ def url(document):
 def manaToEmoji(manaString):
     """ Take an input and replace all instances of mana symbols with appropriate emojis """
     manaString = manaString.replace("{1000000}",":mana-1000000-1::mana-1000000-2::mana-1000000-3::mana-1000000-4:") #Stupid Gleemax
-    for match in re.findall(r'{\d+}|{[A-Z]}|{\d\/[A-Z]}|{[A-Z]\/[A-Z]}', manaString): 
+    for match in emoji_regexp.findall(manaString): 
         manaString = manaString.replace(match, match.replace("{", ":mana-").replace("}", ":").replace("/",""))
     return manaString
