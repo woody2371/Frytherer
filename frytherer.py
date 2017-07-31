@@ -1356,6 +1356,7 @@ def url(document):
         ret = "I didn't understand what document you wanted"
     return ret
 def manaToEmoji(manaString):
-    for match in re.findall(r'{\d+}|{[A-Z]}', manaString):
-        manaString = manaString.replace(match, ":mana-" + match.replace("{", "").replace("}", "") + ":")
+    """ Take an input and replace all instances of mana symbols with appropriate emojis """
+    for match in re.findall(r'{\d+}|{[A-Z]}|{\d\/[A-Z]}|{[A-Z]\/[A-Z]}', manaString): 
+        manaString = manaString.replace(match, ":mana-" + match.replace("{", "").replace("}", "").replace("/","") + ":")
     return manaString
