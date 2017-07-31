@@ -851,7 +851,7 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
     if quick:
         try:
             if not short:
-                return prepend + card["name"] + " (" + card["manaCost"] + ")"
+                return prepend + card["name"] + " (" + manaToEmoji(card["manaCost"]) + ")"
             else:
                 squished_rules_text = ""
                 # Do some MODO-like compression of rules text to get it to fit
@@ -907,7 +907,7 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
         if(names):
             message_out += "(Part of " + " // ".join(names) + ")" + (" " if slackChannel else '\n')
         if(card["manaCost"]):
-            message_out += card["manaCost"] + (" " if slackChannel else '\n')
+            message_out += manaToEmoji(card["manaCost"]) + (" " if slackChannel else '\n')
             if not any(word in card["manaCost"] for word in "W U B R G") and colors != []:
                 message_out += ", ".join(colors) + (" " if slackChannel else '\n')
         else:
@@ -918,9 +918,9 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
         if "Planeswalker" in types:
             message_out += "[" + str(card["loyalty"]) + "]" + ("  " if slackChannel else '\n')
         if slackChannel:
-            message_out += card["text"].replace('\n', ' / ')
+            message_out += manaToEmoji(card["text"]).replace('\n', ' / ')
         else:
-            message_out += card["text"] + '\n'
+            message_out += manaToEmoji(card["text"]) + '\n'
     if extend:
         message_out += "----------" + '\n'
         sources = cursor.execute('SELECT "set", source, rarity, starter, artist, flavor, number FROM cards WHERE name = ?', (card["name"],)).fetchall()
@@ -1355,3 +1355,7 @@ def url(document):
     else:
         ret = "I didn't understand what document you wanted"
     return ret
+def manaToEmoji(manaString):
+    for match in re.findall(r'{\d+}|{[A-Z]}', manaString):
+        manaString = manaString.replace(match, ":mana-" + match.replace("{", "").replace("}", "") + ":")
+    return manaString
