@@ -1359,9 +1359,9 @@ def url(document):
             logging.debug(sys.exc_info())
             ret = "Something went wrong parsing your request"
     elif doc_words[0] == "mtr":
-        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_mtr_28apr17_en.pdf"
+        ret = "ihttp://wpn.wizards.com/sites/wpn/files/attachements/mtg_mtr_14jul17_en.pdf"
     elif doc_words[0] == "ipg":
-        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_ipg_28apr17_en.pdf"
+        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_ipg_14jul17_en.pdf"
     elif doc_words[0] == "aipg":
         ret = "http://blogs.magicjudges.org/rules/ipg/"
     elif doc_words[0] == "amtr":
