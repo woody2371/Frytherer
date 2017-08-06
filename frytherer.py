@@ -27,6 +27,7 @@ except ImportError:
 mana_regexp = re.compile('([0-9]*)(b*)(g*)(r*)(u*)(w*)')
 section_regexp = re.compile('a{0,1}(ipg|mtr) (?:(appendix [a-z])|(\d+)(?:(?:\.)(\d{1,2})){0,1})')
 single_quoted_word = re.compile('^(?:\"|\')\w+(?:\"|\')$')
+emoji_regexp = re.compile('{\d+}|{[A-Z]}|{\d\/[A-Z]}|{[A-Z]\/[A-Z]}')
 
 
 def retrieve_store_events(store):
@@ -851,7 +852,7 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
     if quick:
         try:
             if not short:
-                return prepend + card["name"] + " (" + card["manaCost"] + ")"
+                return prepend + card["name"] + " (" + manaToEmoji(card["manaCost"]) + ")"
             else:
                 squished_rules_text = ""
                 # Do some MODO-like compression of rules text to get it to fit
@@ -907,7 +908,7 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
         if(names):
             message_out += "(Part of " + " // ".join(names) + ")" + (" " if slackChannel else '\n')
         if(card["manaCost"]):
-            message_out += card["manaCost"] + (" " if slackChannel else '\n')
+            message_out += manaToEmoji(card["manaCost"]) + (" " if slackChannel else '\n')
             if not any(word in card["manaCost"] for word in "W U B R G") and colors != []:
                 message_out += ", ".join(colors) + (" " if slackChannel else '\n')
         else:
@@ -918,9 +919,9 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
         if "Planeswalker" in types:
             message_out += "[" + str(card["loyalty"]) + "]" + ("  " if slackChannel else '\n')
         if slackChannel:
-            message_out += card["text"].replace('\n', ' / ')
+            message_out += manaToEmoji(card["text"]).replace('\n', ' / ')
         else:
-            message_out += card["text"] + '\n'
+            message_out += manaToEmoji(card["text"]) + '\n'
     if extend:
         message_out += "----------" + '\n'
         sources = cursor.execute('SELECT "set", source, rarity, starter, artist, flavor, number FROM cards WHERE name = ?', (card["name"],)).fetchall()
@@ -1355,3 +1356,9 @@ def url(document):
     else:
         ret = "I didn't understand what document you wanted"
     return ret
+def manaToEmoji(manaString):
+    """ Take an input and replace all instances of mana symbols with appropriate emojis """
+    manaString = manaString.replace("{1000000}",":mana-1000000-1::mana-1000000-2::mana-1000000-3::mana-1000000-4:") #Stupid Gleemax
+    for match in emoji_regexp.findall(manaString): 
+        manaString = manaString.replace(match, match.replace("{", ":mana-").replace("}", ":").replace("/",""))
+    return manaString
