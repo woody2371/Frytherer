@@ -32,7 +32,6 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 l = logging.getLogger()
 
-
 cache = LRUCache(maxsize=100)
 lock = RLock()
 logging.debug("Cache instantiated")
@@ -415,7 +414,7 @@ def dispatch_message(incomingMessage, fromChannel):
             # Process the left word, slip the right one into the command list
             (left, right) = split_card_regex.match(message).groups()
             if "http" not in left and "spoiler" not in left:
-                logging.info("Split card detected! {} // {}".format(left, right))
+                logging.warning("Split card detected! {} // {}".format(left, right))
                 message = left
                 command_list.insert(idx + 1, right)
             else:
@@ -452,7 +451,7 @@ def dispatch_message(incomingMessage, fromChannel):
         elif message_words[0] == "wow" and len(message_words) > 1:
             item_name = " ".join(message_words[1:])
             try:
-                r = requests.get('http://www.wowhead.com/search?q={}&opensearch'.format(item_name))
+                r = requests.get('http://www.wowhead.com/search?q=' + item_name + '&opensearch')
                 if r.status_code == 200:
                     x = basicjson.loads(r.text)
                     if len(x[1]):
@@ -632,11 +631,12 @@ def dispatch_message(incomingMessage, fromChannel):
                 ret.append(("Heads" if flip else "Tails", False))
             else:
                 try:
-                    flip = random.randint(1, int(message[1:]))
+                    dvalue = int(message[1:])
+                    flip = random.randint(1, dvalue)
                 except:
                     logging.error(sys.exc_info())
                     return ("Error rolling die", False)
-                ret.append((str(flip) + (" - CRIT! :D" if flip == 20 else ""), False))
+                ret.append((str(flip) + (" - CRIT! :D" if (flip == dvalue and dvalue > 6) else ""), False))
         elif message_words[0] in ["mo", "jho", "sto"]:
             try:
                 cmc = str(int(message_words[1]))
@@ -653,7 +653,7 @@ def dispatch_message(incomingMessage, fromChannel):
             if not cards:
                 return ("No cards found :(", False)
             ret.append(("\n".join([printCard(c, card, quick=True, slackChannel=fromChannel) for card in cards]), False))
-        elif message in ["alldocs", "mt", "missed trigger", "l@ec", "looking at extra cards", "hce", "hidden card error", "mpe", "mulligan procedure error", "grv", "game rule violation", "ftmgs", "failure to maintain game state", "tardiness", "oa", "outside assistance", "slow play", "insufficient shuffling", "ddlp", "deck/decklist problem", "lpv", "limited procedure violation", "cpv", "communication policy violation", "mc", "marked cards", "usc minor", "usc major", "idaw", "improperly determining a winner", "ab", "aggressive behaviour", "totm", "theft of tournament material", "stalling", "cheating"] or message.startswith("alldocs ") or message[0:4] in ["url ", "mtr ", "ipg ", "mtr", "ipg", "amtr", "aipg", "jar", "jar ", "peip", "pptq", "rptq"]:
+        elif message in ["alldocs", "mt", "missed trigger", "l@ec", "looking at extra cards", "hce", "hidden card error", "mpe", "mulligan procedure error", "grv", "game rule violation", "ftmgs", "failure to maintain game state", "tardiness", "oa", "outside assistance", "slow play", "insufficient shuffling", "ddlp", "deck/decklist problem", "lpv", "limited procedure violation", "cpv", "communication policy violation", "mc", "marked cards", "usc minor", "usc major", "idaw", "improperly determining a winner", "ab", "aggressive behaviour", "totm", "theft of tournament material", "stalling", "cheating"] or message.startswith("alldocs ") or message[0:4] in ["url ", "mtr ", "ipg ", "mtr", "ipg", "amtr", "aipg", "jar", "jar ", "peip", "pptq", "rptq", "nats", "nationals"]:
             ret.append((url(message), False))
         elif message.startswith("printsets"):
             c.execute('SELECT DISTINCT(name), code, releaseDate FROM sets ORDER BY ' + ('releaseDate' if message.endswith("inorder") else 'name') + ' ASC')

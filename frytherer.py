@@ -29,7 +29,6 @@ section_regexp = re.compile('a{0,1}(ipg|mtr) (?:(appendix [a-z])|(\d+)(?:(?:\.)(
 single_quoted_word = re.compile('^(?:\"|\')\w+(?:\"|\')$')
 emoji_regexp = re.compile('{\d+}|{[A-Z]}|{\d\/[A-Z]}|{[A-Z]\/[A-Z]}')
 
-
 def retrieve_store_events(store):
     """If we haven't already cached it, open the pickled event file and read in the store's events"""
     logging.info("Store events cache get")
@@ -55,7 +54,13 @@ def get_store_events(store):
     except ValueError:
         pass
 
-    (storename, events) = store_cache[store]
+    try:
+        (storename, events) = store_cache[store]
+    except ValueError:
+        return "Problem retrieving events for the store"
+        logging.info(store_cache[store])
+        logging.error(store_cache[store])
+
     if events:
         ret = "Upcoming events at {}:\n".format(storename.title())
         for event in events:
@@ -810,7 +815,7 @@ def printSpoilerCard(cursor, cardname):
     message_out = ""
     if card:
         message_out += "*" + card["name"] + "* | "
-        message_out += card["text"].replace('\n', ' | ')
+        message_out +=  manaToEmoji(card["text"].replace('\n', ' | '))
     else:
         message_out = "Card not found!?"
     return message_out
@@ -819,20 +824,22 @@ def printSpoilerCard(cursor, cardname):
 def printHSCard(cursor, cardname):
     """Given a hearthstone card name, return a string"""
     logging.debug(cardname)
-    card = cursor.execute("SELECT * FROM hearthstonecards WHERE name LIKE ? ORDER BY type DESC", (cardname,)).fetchone()
+    cards = cursor.execute("SELECT * FROM hearthstonecards WHERE name LIKE ? ORDER BY id ASC, type DESC", (cardname,)).fetchall()
     message_out = ""
-    if card:
-        message_out += "*" + card["name"] + "* | "
-        message_out += "{" + str(card["cost"]) + "}" + " | "
-        message_out += card["type"].replace("_", " ") + (" (" + card["race"] + ")" if card["race"] else "") + " | "
-        if card["type"] == "Weapon":
-            message_out += str(card["attack"]) + "/" + str(card["durability"]) + " | "
-        elif card["type"] == "Minion":
-            message_out += str(card["attack"]) + "/" + str(card["health"]) + " | "
-        if card["text"]:
-            message_out += card["text"].replace("<b>", "").replace("</b>", "").replace("<i>", "_").replace("</i>", "_").replace('\n', ' ').replace("[x]", "").replace("$", "").replace("#", "").replace("Hero Power ", "")
-        if card["flavor"]:
-            message_out += " | " + card["flavor"]
+    if cards:
+        for card in cards:
+            message_out += "*" + card["name"] + "* | "
+            message_out += "{" + str(card["cost"]) + "}" + " | "
+            message_out += card["type"].replace("_", " ") + (" (" + card["race"] + ")" if card["race"] else "") + " | "
+            if card["type"] == "Weapon":
+                message_out += str(card["attack"]) + "/" + str(card["durability"]) + " | "
+            elif card["type"] == "Minion":
+                message_out += str(card["attack"]) + "/" + str(card["health"]) + " | "
+            if card["text"]:
+                message_out += card["text"].replace("<b>Hero Power</b>", "").replace("<b>", "").replace("</b>", "").replace("<i>", "_").replace("</i>", "_").replace('\n', ' ').replace("[x]", "").replace("$", "").replace("#", "")
+            if card["flavor"]:
+                message_out += " | " + card["flavor"]
+            message_out += "\n"
     else:
         message_out = "Card not found!?"
     return message_out
@@ -853,6 +860,7 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
         try:
             if not short:
                 return prepend + card["name"] + " (" + manaToEmoji(card["manaCost"]) + ")"
+                # return prepend + card["name"] + " (" + card["manaCost"] + ")"
             else:
                 squished_rules_text = ""
                 # Do some MODO-like compression of rules text to get it to fit
@@ -904,11 +912,12 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
             return card + " " + str(sys.exc_info())
     else:
         message_out = ""
-        message_out += ("*" if slackChannel else "") + card["name"] + ("* " if slackChannel else '\n')
+        message_out += "*{}*\n".format(card["name"])
         if(names):
             message_out += "(Part of " + " // ".join(names) + ")" + (" " if slackChannel else '\n')
         if(card["manaCost"]):
             message_out += manaToEmoji(card["manaCost"]) + (" " if slackChannel else '\n')
+            # message_out += card["manaCost"] + (" " if slackChannel else '\n')
             if not any(word in card["manaCost"] for word in "W U B R G") and colors != []:
                 message_out += ", ".join(colors) + (" " if slackChannel else '\n')
         else:
@@ -919,8 +928,10 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
         if "Planeswalker" in types:
             message_out += "[" + str(card["loyalty"]) + "]" + ("  " if slackChannel else '\n')
         if slackChannel:
+            # message_out += card["text"].replace('\n', ' / ')
             message_out += manaToEmoji(card["text"]).replace('\n', ' / ')
         else:
+            # message_out += card["text"] + '\n'
             message_out += manaToEmoji(card["text"]) + '\n'
     if extend:
         message_out += "----------" + '\n'
@@ -1126,7 +1137,7 @@ def help():
     ret += "random - gives a random card\n"
     ret += "printsets - gives a list of all the sets I know about\n"
     ret += "printsetsinorder - gives a list of all the sets in release date order\n"
-    ret += "url <cr|(a)mtr <section>|(a)ipg <section>|<infraction>|jar|peip|pptq|rptq|alldocs> - gives the URL to the requested document\n"
+    ret += "url <cr|(a)mtr <section>|(a)ipg <section>|<infraction>|jar|peip|pptq|rptq|nats|alldocs> - gives the URL to the requested document\n"
     ret += "flavour <card> - gives flavour text of a card.\n"
     ret += "ruling <card> [number] - gives a specific Gatherer ruling of a card.\n"
     ret += "events <storename|date|today> - gives upcoming premiere-level events at the given store, or on the given date (in ISO Format e.g 2017-01-01, or the word 'today').\n"
@@ -1231,9 +1242,11 @@ def url(document):
     elif doc_words[0] == "alldocs":
         ret = "http://wpn.wizards.com/en/resources/rules-documents"
     elif doc_words[0] == "pptq":
-        ret = "<http://magic.wizards.com/en/events/instoreplay/pptqhou|HOU>"
+        ret = "<http://magic.wizards.com/en/events/instoreplay/pptqxln|XLN> | <http://magic.wizards.com/en/events/instoreplay/pptqrix|RIX>"
     elif doc_words[0] == "rptq":
-        ret = "<http://magic.wizards.com/en/events/instoreplay/rptqhou|HOU>"
+        ret = "<http://magic.wizards.com/en/events/instoreplay/rptqxln|XLN> | <http://magic.wizards.com/en/events/instoreplay/rptqrix|RIX>"
+    elif doc_words[0] == "nats" or doc_words[0] == "nationals":
+        ret = "<http://magic.wizards.com/en/events/premierplay/2017nationals|Nats>"
     elif doc_words[0] == "mt" or " ".join(doc_words[0:2]) == "missed trigger":
         ret = "http://blogs.magicjudges.org/rules/ipg2-1/"
     elif doc_words[0] == "l@ec" or doc_words[0] == "lec" or " ".join(document[0:3]) == "looking at extra cards":
@@ -1253,9 +1266,9 @@ def url(document):
     elif " ".join(doc_words[0:2]) == "slow play":
         ret = "http://blogs.magicjudges.org/rules/ipg3-3/"
     elif " ".join(doc_words[0:2]) == "insufficient shuffling":
-        ret = "http://blogs.magicjudges.org/rules/ipg3-4/"
+        ret = "http://blogs.magicjudges.org/rules/ipg3-9/"
     elif doc_words[0] == "ddlp" or doc_words[0] == "d/dlp" or ("deck" in document and "problem" in document):
-        ret = "http://blogs.magicjudges.org/rules/ipg3-5/"
+        ret = "http://blogs.magicjudges.org/rules/ipg3-4/ and http://blogs.magicjudges.org/rules/ipg3-5/"
     elif doc_words[0] == "lpv" or " ".join(document[0:3]) == "limited procedure violation":
         ret = "http://blogs.magicjudges.org/rules/ipg3-6/"
     elif doc_words[0] == "cpv" or " ".join(document[0:3]) == "communication policy violation":
@@ -1301,7 +1314,7 @@ def url(document):
                         if(
                             (main == 1 and (sub >= 1 and sub <= 5)) or
                             (main == 2 and (sub >= 1 and sub <= 6)) or
-                            (main == 3 and (sub >= 1 and sub <= 8)) or
+                            (main == 3 and (sub >= 1 and sub <= 9)) or
                             (main == 4 and (sub >= 1 and sub <= 8))
                         ):
                             ret = "http://blogs.magicjudges.org/rules/ipg%d-%d/" % (main, sub)
@@ -1328,7 +1341,7 @@ def url(document):
                             (main == 2 and (sub >= 1 and sub <= 14)) or
                             (main == 3 and (sub >= 1 and sub <= 15)) or
                             (main == 4 and (sub >= 1 and sub <= 5)) or
-                            (main == 5 and (sub >= 1 and sub <= 5)) or
+                            (main == 5 and (sub >= 1 and sub <= 6)) or
                             (main == 6 and (sub >= 1 and sub <= 7)) or
                             (main == 7 and (sub >= 1 and sub <= 7)) or
                             (main == 8 and (sub >= 1 and sub <= 6)) or
@@ -1346,9 +1359,9 @@ def url(document):
             logging.debug(sys.exc_info())
             ret = "Something went wrong parsing your request"
     elif doc_words[0] == "mtr":
-        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_mtr_20jan17_en.pdf"
+        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_mtr_28apr17_en.pdf"
     elif doc_words[0] == "ipg":
-        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_ipg_20jan17_en_0.pdf"
+        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_ipg_28apr17_en.pdf"
     elif doc_words[0] == "aipg":
         ret = "http://blogs.magicjudges.org/rules/ipg/"
     elif doc_words[0] == "amtr":
@@ -1356,9 +1369,10 @@ def url(document):
     else:
         ret = "I didn't understand what document you wanted"
     return ret
+
 def manaToEmoji(manaString):
     """ Take an input and replace all instances of mana symbols with appropriate emojis """
-    manaString = manaString.replace("{1000000}",":mana-1000000-1::mana-1000000-2::mana-1000000-3::mana-1000000-4:") #Stupid Gleemax
+    manaString = manaString.replace("{1000000}",":mana-1000000-1::mana-1000000-2::mana-1000000-3::mana-1000000-4:") # Stupid Gleemax
     for match in emoji_regexp.findall(manaString): 
         manaString = manaString.replace(match, match.replace("{", ":mana-").replace("}", ":").replace("/",""))
     return manaString
