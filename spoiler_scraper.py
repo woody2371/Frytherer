@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Pull the spoiler RSS feed from MTGSalvation and attempt to scrape
 the list of cards from it, then add new cards to the database"""
 import feedparser
@@ -43,15 +44,15 @@ if d["status"] == 200:
             # Check if we're currently in the rules text
             if ruleFlag == 1:
                 if not (value.startswith("Flavor Text:") or value.startswith("Illus.")):
-                    if not value == "":
+                    if value:
                         ruleString += value + " / "
                 else:
                     ruleFlag = 0
             if value.startswith("Name:"):
                 # Check if we already have this card
-                card_check = c.execute("SELECT * FROM spoilers WHERE name LIKE ?", (value[6:],)).fetchall()
+                card_check = c.execute("SELECT * FROM spoilers WHERE name = ?", (value[6:],)).fetchall()
                 if card_check:
-                    print 'Skipping'
+                    print 'Skipping {}'.format(value[6:].encode('utf-8'))
                     skipFlag = 1
                     break
                 card["name"] = value[6:]
@@ -63,7 +64,7 @@ if d["status"] == 200:
                 card["type"] = value[6:]
             elif value.startswith("Rules Text:"):
                 ruleFlag = 1
-                ruleString += value[12:]
+                ruleString += value[12:] + " "
             elif value.startswith("Flavor Text:"):
                 card["flavor"] = value[13:]
             elif value.startswith("Illus."):
@@ -76,7 +77,7 @@ if d["status"] == 200:
                 card["power"] = value.split("/")[1][5:]
                 card["toughness"] = value.split("/")[2]
         # Strip off final newline and save rulestext
-        card["text"] = ruleString.strip(" / ")
+        card["text"] = ruleString.replace("<i>", "_").replace("</i>", "_").strip(" / ")
         if skipFlag == 0:
             c.execute("INSERT INTO spoilers(name, 'text', 'set', manaCost, type, flavor, artist, rarity, setnum, power, toughness) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (card["name"], card["text"], card["set"], card["manaCost"], card["type"], card["flavor"], card["artist"], card["rarity"], card["setnum"], card["power"], card["toughness"]))
         skipFlag = 1
