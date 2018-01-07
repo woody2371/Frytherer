@@ -810,11 +810,15 @@ def printSpoilerCard(cursor, cardname):
     message_out = ""
     if card:
         message_out += "*" + card["name"] + "* | "
+        if(card["manaCost"]):
+            message_out += card["manaCost"] + (" ")
+        message_out += ("| ") + card["type"] + (" | ")
+        if "Creature" in card["type"] or "Vehicle" in card["type"]:
+            message_out += card["power"] + "/" + card["toughness"] + (" | ")
         message_out += card["text"].replace('\n', ' | ')
     else:
         message_out = "Card not found!?"
     return message_out
-
 
 def printHSCard(cursor, cardname):
     """Given a hearthstone card name, return a string"""
