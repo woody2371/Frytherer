@@ -815,7 +815,14 @@ def printSpoilerCard(cursor, cardname):
     message_out = ""
     if card:
         message_out += "*" + card["name"] + "* | "
+        if card["manaCost"]:
+            message_out += manaToEmoji(card["manaCost"]) + " | "
+        if "Creature" in card["type"] or "Vehicle" in card["type"]:
+            message_out += card["power"] + "/" + card["toughness"] + (" | ")
+        message_out += card["type"] + " | "
         message_out +=  manaToEmoji(card["text"].replace('\n', ' | '))
+        if card["flavor"]:
+            message_out += " | " + "_{}_".format(card["flavor"]) + " | "
     else:
         message_out = "Card not found!?"
     return message_out
@@ -839,6 +846,32 @@ def printHSCard(cursor, cardname):
                 message_out += card["text"].replace("<b>Hero Power</b>", "").replace("<b>", "").replace("</b>", "").replace("<i>", "_").replace("</i>", "_").replace('\n', ' ').replace("[x]", "").replace("$", "").replace("#", "")
             if card["flavor"]:
                 message_out += " | " + card["flavor"]
+            message_out += "\n"
+    else:
+        message_out = "Card not found!?"
+    return message_out
+
+
+def printEternalCard(cursor, cardname):
+    """Given an eternal card name, return a string"""
+    logging.debug(cardname)
+    cards = cursor.execute("SELECT * FROM eternalcards WHERE name LIKE ? ORDER BY id ASC, type DESC", (cardname,)).fetchall()
+    message_out = ""
+    if cards:
+        for card in cards:
+            message_out += "*" + card["name"] + "* | "
+            if card["cost"] != -1:
+                message_out += str(card["cost"]) + " | "
+            if card["influence"]:
+                message_out += card["influence"] + " | "
+            # if card["colors"]:
+            #    message_out += card["colors"] + " | "
+            message_out += card["type"] + (" (" + card["subtypes"] + ")" if card["subtypes"] else "") + " | "
+            message_out += card["rarity"] + " | "
+            if card["attack"] != -1:
+                message_out += str(card["attack"]) + "/" + str(card["health"]) + " | "
+            if card["text"]:
+                message_out += card["text"].replace(";", " /")
             message_out += "\n"
     else:
         message_out = "Card not found!?"
@@ -912,7 +945,7 @@ def printCard(cursor, card, extend=0, prepend="", quick=True, short=False, ret=F
             return card + " " + str(sys.exc_info())
     else:
         message_out = ""
-        message_out += "*{}*\n".format(card["name"])
+        message_out += "*{}*{}".format(card["name"], " " if slackChannel else '\n')
         if(names):
             message_out += "(Part of " + " // ".join(names) + ")" + (" " if slackChannel else '\n')
         if(card["manaCost"]):
@@ -1359,9 +1392,9 @@ def url(document):
             logging.debug(sys.exc_info())
             ret = "Something went wrong parsing your request"
     elif doc_words[0] == "mtr":
-        ret = "ihttp://wpn.wizards.com/sites/wpn/files/attachements/mtg_mtr_14jul17_en.pdf"
+        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_mtr_29sep17_en.pdf"
     elif doc_words[0] == "ipg":
-        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_ipg_14jul17_en.pdf"
+        ret = "http://wpn.wizards.com/sites/wpn/files/attachements/mtg_ipg_29sep17_en.pdf"
     elif doc_words[0] == "aipg":
         ret = "http://blogs.magicjudges.org/rules/ipg/"
     elif doc_words[0] == "amtr":
