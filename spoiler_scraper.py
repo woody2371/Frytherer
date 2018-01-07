@@ -16,6 +16,8 @@ except sqlite.OperationalError:  # pragma: no cover
 c.execute('''CREATE TABLE IF NOT EXISTS spoilers (
                 name TEXT PRIMARY KEY UNIQUE,
                 'text' TEXT,
+                power TEXT,
+                toughness TEXT,
                 type TEXT,
                 rarity TEXT,
                 'set' TEXT,
@@ -32,7 +34,7 @@ d = feedparser.parse('http://www.mtgsalvation.com/spoilers.rss')
 if d["status"] == 200:
     for entry in d['entries']:
         # Iterate through the card entries and create a card dictionary in the same format as it is stored in the database
-        card = {"text": "", "flavor": ""}
+        card = {"text": "", "flavor": "", "power": "", "toughness": ""}
         # Rules can be multiple lines, so this flag tells us if we are currently inside that paragraph
         ruleFlag = 0
         skipFlag = 0
@@ -70,10 +72,13 @@ if d["status"] == 200:
                 card["rarity"] = value[8:]
             elif value.startswith("Set Number:"):
                 card["setnum"] = value[13:]
+            elif value.startswith("Pow/Tgh:"):
+                card["power"] = value.split("/")[1][5:]
+                card["toughness"] = value.split("/")[2]
         # Strip off final newline and save rulestext
         card["text"] = ruleString.strip(" / ")
         if skipFlag == 0:
-            c.execute("INSERT INTO spoilers(name, 'text', 'set', manaCost, type, flavor, artist, rarity, setnum) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", (card["name"], card["text"], card["set"], card["manaCost"], card["type"], card["flavor"], card["artist"], card["rarity"], card["setnum"]))
+            c.execute("INSERT INTO spoilers(name, 'text', 'set', manaCost, type, flavor, artist, rarity, setnum, power, toughness) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (card["name"], card["text"], card["set"], card["manaCost"], card["type"], card["flavor"], card["artist"], card["rarity"], card["setnum"], card["power"], card["toughness"]))
         skipFlag = 1
 else:
     print("Error pulling the RSS feed")
