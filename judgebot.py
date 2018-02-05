@@ -679,7 +679,7 @@ def dispatch_message(incomingMessage, fromChannel):
                 ret.append(("", False))
             if len(cards) > 20:
                 ret.append(("Too many cards to print! ({} > 20).".format(len(cards)), False))
-            if fromChannel:
+            elif fromChannel:
                 # If we've asked for some cards in a channel
                 if len(cards) == 1:
                     # One card is fine, show them
@@ -733,7 +733,7 @@ def dispatch_message(incomingMessage, fromChannel):
                 ret.append(("No cards found", False))
             if len(cards) > 20:
                 ret.append(("Too many cards to print! ({} > 20).".format(len(cards)), False))
-            if fromChannel:
+            elif fromChannel:
                 # If we've asked for some cards in a channel
                 # If they're quick, <= 10 is fine
                 if quick and len(cards) <= 10:
