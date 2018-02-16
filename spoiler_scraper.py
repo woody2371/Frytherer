@@ -28,7 +28,7 @@ c.execute('''CREATE TABLE IF NOT EXISTS spoilers (
 ''')
 
 # Pull the RSS feed as a dict
-d = feedparser.parse('http://www.mtgsalvation.com/spoilers.rss')
+d = feedparser.parse('https://www.mtgsalvation.com/spoilers.rss')
 # A list of card dictionaries for easier searching later check if parsing successful
 if d["status"] == 200:
     for entry in d['entries']:
@@ -77,7 +77,7 @@ if d["status"] == 200:
             c.execute("INSERT INTO spoilers(name, 'text', 'set', manaCost, type, flavor, artist, rarity, setnum) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", (card["name"], card["text"], card["set"], card["manaCost"], card["type"], card["flavor"], card["artist"], card["rarity"], card["setnum"]))
         skipFlag = 1
 else:
-    print("Error pulling the RSS feed")
+    print("Error pulling the RSS feed. HTTP Status Code {}".format(d["status"]))
     sys.exit(0)
 
 conn.commit()
